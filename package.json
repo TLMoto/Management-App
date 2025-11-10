@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "next lint",
+    "prettier:write": "prettier --write .",
+    "prettier:check": "prettier --check ."
   },
   "dependencies": {
     "airtable": "^0.12.2",
@@ -22,7 +24,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
+    "eslint-config-prettier": "^10.1.2",
+    "eslint-plugin-prettier": "^5.2.6",
     "eslint-config-next": "15.5.1",
+    "prettier": "^3.5.3",
+    "prettier-plugin-css-order": "^2.1.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

@@ -6,17 +6,17 @@ interface BackgroundLayoutProps {
 
 const BackgroundLayout = ({ children }: BackgroundLayoutProps) => {
   return (
-    <div 
+    <div
       className="min-h-screen"
       style={{
         backgroundImage: "url('/TLApp.jpeg')",
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat'
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
       }}
     >
-        {children}
-      </div>
+      {children}
+    </div>
   );
 };
 
