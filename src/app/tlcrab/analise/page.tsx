@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
-import Navbar from "../../../components/Navbar";
-import BackgroundLayout from "@/components/BackGroundLayout";
 
 interface TimeSlot {
   day: number;
@@ -184,174 +182,163 @@ export default function TLCrabAnalise() {
   const selectedPersonStats = selectedPerson ? getPersonStats(selectedPerson) : null;
 
   return (
-    <BackgroundLayout>
-      <Navbar />
+    <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-blue-500 mb-4">
+          TLCrab - Análise de Disponibilidade
+        </h1>
+        <p className="text-gray-600">
+          Visualização e estatísticas da disponibilidade da equipa TLMoto
+        </p>
+      </div>
 
-      <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-blue-500 mb-4">
-            TLCrab - Análise de Disponibilidade
-          </h1>
-          <p className="text-gray-600">
-            Visualização e estatísticas da disponibilidade da equipa TLMoto
-          </p>
-        </div>
+      {/* motor de busca de Pessoa para Visualização Individual */}
+      <div className="bg-white rounded-lg shadow p-6 mb-8">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Calendário Individual</h2>
+        <div className="flex flex-wrap gap-4 items-end">
+          <div className="flex-1 min-w-64">
+            <label htmlFor="person-search" className="block text-sm font-medium text-gray-700 mb-2">
+              Pesquisar Pessoa:
+            </label>
+            <div className="relative" ref={dropdownRef}>
+              <div className="relative">
+                <input
+                  ref={inputRef}
+                  id="person-search"
+                  type="text"
+                  value={searchTerm}
+                  onChange={handleInputChange}
+                  onFocus={handleInputFocus}
+                  placeholder="Digite o nome ou área..."
+                  className={`block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                    searchTerm.trim() === "" ? "text-gray-400" : "text-black"
+                  }`}
+                />
+                {selectedPerson && (
+                  <button
+                    onClick={clearSelection}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                )}
+              </div>
 
-        {/* motor de busca de Pessoa para Visualização Individual */}
-        <div className="bg-white rounded-lg shadow p-6 mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Calendário Individual</h2>
-          <div className="flex flex-wrap gap-4 items-end">
-            <div className="flex-1 min-w-64">
-              <label
-                htmlFor="person-search"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Pesquisar Pessoa:
-              </label>
-              <div className="relative" ref={dropdownRef}>
-                <div className="relative">
-                  <input
-                    ref={inputRef}
-                    id="person-search"
-                    type="text"
-                    value={searchTerm}
-                    onChange={handleInputChange}
-                    onFocus={handleInputFocus}
-                    placeholder="Digite o nome ou área..."
-                    className={`block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
-                      searchTerm.trim() === "" ? "text-gray-400" : "text-black"
-                    }`}
-                  />
-                  {selectedPerson && (
+              {isDropdownOpen && filteredPeople.length > 0 && (
+                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                  {filteredPeople.map(person => (
                     <button
-                      onClick={clearSelection}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                    >
-                      <svg
-                        className="h-5 w-5"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-
-                {isDropdownOpen && filteredPeople.length > 0 && (
-                  <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                    {filteredPeople.map(person => (
-                      <button
-                        key={person.id}
-                        onClick={() => handlePersonSelect(person)}
-                        className={`
+                      key={person.id}
+                      onClick={() => handlePersonSelect(person)}
+                      className={`
                           w-full text-left px-3 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none
                           ${selectedPerson === person.id ? "bg-blue-100 text-blue-900" : "text-gray-900"}
                         `}
-                      >
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium">{person.name}</span>
-                          <span className="text-sm text-gray-500">{person.area}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {isDropdownOpen && filteredPeople.length === 0 && searchTerm.trim() !== "" && (
-                  <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg">
-                    <div className="px-3 py-2 text-gray-500 text-sm">
-                      Nenhuma pessoa encontrada para &quot;{searchTerm}&quot;
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {selectedPersonData && (
-              <div className="bg-blue-50 px-4 py-2 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  <strong>{selectedPersonData.name}</strong> - {selectedPersonData.area}
-                </p>
-                {selectedPersonStats && (
-                  <p className="text-xs text-blue-600">
-                    {selectedPersonStats.totalHours}h ({selectedPersonStats.weekPercentage}% da
-                    semana)
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Calendário Individual */}
-        {showIndividualCalendar && selectedPerson && selectedPersonData && (
-          <div className="bg-white rounded-lg shadow overflow-hidden mb-8">
-            <div className="p-4 border-b bg-gray-50">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Disponibilidade de {selectedPersonData.name}
-                  </h3>
-                  <p className="text-sm text-gray-600">{selectedPersonData.area}</p>
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">{person.name}</span>
+                        <span className="text-sm text-gray-500">{person.area}</span>
+                      </div>
+                    </button>
+                  ))}
                 </div>
-                {selectedPersonStats && (
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-blue-600">
-                      {selectedPersonStats.totalHours}h
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {selectedPersonStats.totalSlots} slots ({selectedPersonStats.weekPercentage}%)
-                    </p>
+              )}
+
+              {isDropdownOpen && filteredPeople.length === 0 && searchTerm.trim() !== "" && (
+                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg">
+                  <div className="px-3 py-2 text-gray-500 text-sm">
+                    Nenhuma pessoa encontrada para &quot;{searchTerm}&quot;
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
+          </div>
 
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10 border-r">
-                      Hora
+          {selectedPersonData && (
+            <div className="bg-blue-50 px-4 py-2 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>{selectedPersonData.name}</strong> - {selectedPersonData.area}
+              </p>
+              {selectedPersonStats && (
+                <p className="text-xs text-blue-600">
+                  {selectedPersonStats.totalHours}h ({selectedPersonStats.weekPercentage}% da
+                  semana)
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Calendário Individual */}
+      {showIndividualCalendar && selectedPerson && selectedPersonData && (
+        <div className="bg-white rounded-lg shadow overflow-hidden mb-8">
+          <div className="p-4 border-b bg-gray-50">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Disponibilidade de {selectedPersonData.name}
+                </h3>
+                <p className="text-sm text-gray-600">{selectedPersonData.area}</p>
+              </div>
+              {selectedPersonStats && (
+                <div className="text-right">
+                  <p className="text-lg font-bold text-blue-600">
+                    {selectedPersonStats.totalHours}h
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {selectedPersonStats.totalSlots} slots ({selectedPersonStats.weekPercentage}%)
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10 border-r">
+                    Hora
+                  </th>
+                  {DAYS.map((day, index) => (
+                    <th
+                      key={index}
+                      className="px-1 sm:px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px] sm:min-w-[100px]"
+                    >
+                      <span className="hidden sm:inline">{day}</span>
+                      <span className="sm:hidden">{day.substring(0, 3)}</span>
                     </th>
-                    {DAYS.map((day, index) => (
-                      <th
-                        key={index}
-                        className="px-1 sm:px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px] sm:min-w-[100px]"
-                      >
-                        <span className="hidden sm:inline">{day}</span>
-                        <span className="sm:hidden">{day.substring(0, 3)}</span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {TIME_SLOTS.map((timeSlot, slotIndex) => (
-                    <tr key={slotIndex}>
-                      <td className="px-2 sm:px-4 py-1 sm:py-2 whitespace-nowrap text-xs sm:text-sm font-medium text-gray-900 sticky left-0 bg-white border-r z-10">
-                        {timeSlot.hour.toString().padStart(2, "0")}:
-                        {timeSlot.minute.toString().padStart(2, "0")}
-                      </td>
-                      {DAYS.map((_, dayIndex) => {
-                        const isAvailable = isPersonAvailable(
-                          dayIndex,
-                          timeSlot.hour,
-                          timeSlot.minute,
-                          selectedPerson
-                        );
-                        const totalCount = getSlotCount(dayIndex, timeSlot.hour, timeSlot.minute);
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {TIME_SLOTS.map((timeSlot, slotIndex) => (
+                  <tr key={slotIndex}>
+                    <td className="px-2 sm:px-4 py-1 sm:py-2 whitespace-nowrap text-xs sm:text-sm font-medium text-gray-900 sticky left-0 bg-white border-r z-10">
+                      {timeSlot.hour.toString().padStart(2, "0")}:
+                      {timeSlot.minute.toString().padStart(2, "0")}
+                    </td>
+                    {DAYS.map((_, dayIndex) => {
+                      const isAvailable = isPersonAvailable(
+                        dayIndex,
+                        timeSlot.hour,
+                        timeSlot.minute,
+                        selectedPerson
+                      );
+                      const totalCount = getSlotCount(dayIndex, timeSlot.hour, timeSlot.minute);
 
-                        return (
-                          <td key={dayIndex} className="px-0.5 sm:px-1 py-1">
-                            <div
-                              className={`
+                      return (
+                        <td key={dayIndex} className="px-0.5 sm:px-1 py-1">
+                          <div
+                            className={`
                                 h-6 sm:h-8 w-full border border-gray-200 transition-all duration-200 rounded
                                 flex items-center justify-center relative
                                 ${
@@ -360,65 +347,65 @@ export default function TLCrabAnalise() {
                                     : "bg-gray-100 text-gray-400"
                                 }
                               `}
-                              title={`${DAYS[dayIndex]} ${timeSlot.hour.toString().padStart(2, "0")}:${timeSlot.minute.toString().padStart(2, "0")} - ${isAvailable ? "Disponível" : "Não disponível"} (${totalCount} pessoas no total)`}
-                            >
-                              <span className="text-xs font-medium">{isAvailable ? "✓" : ""}</span>
-                              {totalCount > 1 && (
-                                <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
-                                  {totalCount}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Estatísticas Gerais */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Cobertura Total</h3>
-            <p className="text-3xl font-bold text-blue-600">{overallStats.coverage}%</p>
-            <p className="text-sm text-gray-600">
-              {overallStats.filledSlots} de {overallStats.totalSlots} slots
-            </p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Média por Slot</h3>
-            <p className="text-3xl font-bold text-green-600">{overallStats.averagePeoplePerSlot}</p>
-            <p className="text-sm text-gray-600">pessoas por slot ocupado</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Total de Pessoas</h3>
-            <p className="text-3xl font-bold text-purple-600">{PEOPLE.length}</p>
-            <p className="text-sm text-gray-600">membros da equipa</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              <Link href="/tlcrab" className="text-blue-600 hover:text-blue-800 transition-colors">
-                Editar Turnos
-              </Link>
-            </h3>
-            <p className="text-sm text-gray-600">Voltar à edição de turnos</p>
+                            title={`${DAYS[dayIndex]} ${timeSlot.hour.toString().padStart(2, "0")}:${timeSlot.minute.toString().padStart(2, "0")} - ${isAvailable ? "Disponível" : "Não disponível"} (${totalCount} pessoas no total)`}
+                          >
+                            <span className="text-xs font-medium">{isAvailable ? "✓" : ""}</span>
+                            {totalCount > 1 && (
+                              <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                                {totalCount}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
+      )}
 
-        {/* Estatísticas por Pessoa */}
+      {/* Estatísticas Gerais */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Estatísticas por Pessoa</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {PEOPLE.map(person => {
-              const stats = getPersonStats(person.id);
-              return (
-                <div
-                  key={person.id}
-                  className={`
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Cobertura Total</h3>
+          <p className="text-3xl font-bold text-blue-600">{overallStats.coverage}%</p>
+          <p className="text-sm text-gray-600">
+            {overallStats.filledSlots} de {overallStats.totalSlots} slots
+          </p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Média por Slot</h3>
+          <p className="text-3xl font-bold text-green-600">{overallStats.averagePeoplePerSlot}</p>
+          <p className="text-sm text-gray-600">pessoas por slot ocupado</p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Total de Pessoas</h3>
+          <p className="text-3xl font-bold text-purple-600">{PEOPLE.length}</p>
+          <p className="text-sm text-gray-600">membros da equipa</p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            <Link href="/tlcrab" className="text-blue-600 hover:text-blue-800 transition-colors">
+              Editar Turnos
+            </Link>
+          </h3>
+          <p className="text-sm text-gray-600">Voltar à edição de turnos</p>
+        </div>
+      </div>
+
+      {/* Estatísticas por Pessoa */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Estatísticas por Pessoa</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {PEOPLE.map(person => {
+            const stats = getPersonStats(person.id);
+            return (
+              <div
+                key={person.id}
+                className={`
                     border rounded-lg p-4 cursor-pointer transition-all
                     ${
                       selectedPerson === person.id
@@ -426,35 +413,34 @@ export default function TLCrabAnalise() {
                         : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
                     }
                   `}
-                  onClick={() => handlePersonSelect(person)}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-medium">{person.name}</h4>
-                      <p className="text-sm text-gray-600">{person.area}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-blue-600">{stats.totalHours}h</p>
-                      <p className="text-sm text-gray-600">{stats.weekPercentage}% da semana</p>
-                    </div>
+                onClick={() => handlePersonSelect(person)}
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-medium">{person.name}</h4>
+                    <p className="text-sm text-gray-600">{person.area}</p>
                   </div>
-                  <div className="mt-2">
-                    <div className="bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${stats.weekPercentage}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-xs text-gray-500">
-                    {stats.totalSlots} slots ocupados - Clique para ver calendário
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-blue-600">{stats.totalHours}h</p>
+                    <p className="text-sm text-gray-600">{stats.weekPercentage}% da semana</p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+                <div className="mt-2">
+                  <div className="bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${stats.weekPercentage}%` }}
+                    ></div>
+                  </div>
+                </div>
+                <div className="mt-2 text-xs text-gray-500">
+                  {stats.totalSlots} slots ocupados - Clique para ver calendário
+                </div>
+              </div>
+            );
+          })}
         </div>
-      </main>
-    </BackgroundLayout>
+      </div>
+    </main>
   );
 }

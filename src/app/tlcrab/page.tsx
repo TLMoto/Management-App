@@ -4,8 +4,6 @@
 
 import Link from "next/link";
 import { useState, useCallback, useRef, useEffect } from "react";
-import Navbar from "../../components/Navbar";
-import BackgroundLayout from "@/components/BackGroundLayout";
 
 interface TimeSlot {
   day: number;
@@ -287,9 +285,7 @@ export default function TLCrab() {
   };
 
   return (
-    <BackgroundLayout>
-      <Navbar />
-
+    <>
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
@@ -514,6 +510,6 @@ export default function TLCrab() {
           )}
         </div>
       </main>
-    </BackgroundLayout>
+    </>
   );
 }

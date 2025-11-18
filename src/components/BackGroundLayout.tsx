@@ -1,5 +1,3 @@
-"use client";
-
 interface BackgroundLayoutProps {
   children: React.ReactNode;
 }
@@ -7,13 +5,17 @@ interface BackgroundLayoutProps {
 const BackgroundLayout = ({ children }: BackgroundLayoutProps) => {
   return (
     <div
-      className="min-h-screen"
-      style={{
-        backgroundImage: "url('/TLApp.jpeg')",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-      }}
+      className="
+        min-w-screen
+        bg-[url('/TLApp.jpeg')]   /* mobile image */
+        bg-cover
+        bg-center
+        bg-no-repeat
+        bg-fixed                  /* fixed background */
+
+        md:bg-black              /* desktop = black */
+        md:bg-none
+      "
     >
       {children}
     </div>

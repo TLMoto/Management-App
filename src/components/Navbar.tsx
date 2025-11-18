@@ -10,7 +10,7 @@ const Navbar = () => {
   const pathname = usePathname();
 
   const navigation = [
-    { name: "Inventário", href: "/inventario" },
+    // { name: "Inventário", href: "/inventario" },
     { name: "TLCrab - Edição", href: "/tlcrab" },
     { name: "TLCrab - Análise", href: "/tlcrab/analise" },
   ];
