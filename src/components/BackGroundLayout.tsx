@@ -7,14 +7,14 @@ const BackgroundLayout = ({ children }: BackgroundLayoutProps) => {
     <div
       className="
         min-w-screen
-        bg-[url('/TLApp.jpeg')]   /* mobile image */
+        bg-[url('/TLApp.jpeg')]
         bg-cover
         bg-center
         bg-no-repeat
-        bg-fixed                  /* fixed background */
+        bg-fixed
 
-        md:bg-black              /* desktop = black */
         md:bg-none
+        md:bg-black
       "
     >
       {children}
