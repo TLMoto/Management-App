@@ -19,6 +19,11 @@ export const metadata: Metadata = {
   description: "Sistema de gestão de turnos e gestão de inventário.",
 };
 
+/**
+ * The Layout class defines the overall structure of the application.
+ *
+ * @class Layout
+ */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">

@@ -1,7 +1,5 @@
 "use client";
 
-//alterar o tlcrab edição para um pop up, ou seja por tudo na mesma pagina
-
 import Link from "next/link";
 import { useState, useCallback, useRef, useEffect } from "react";
 
@@ -38,6 +36,11 @@ const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => {
   return { hour, minute };
 });
 
+/**
+ * The TLCrab class is the initial page of the application.
+ *
+ * @class TLCrab
+ */
 export default function TLCrab() {
   const [selectedPerson, setSelectedPerson] = useState<string>("");
   const [selectedArea, setSelectedArea] = useState<string>("");
