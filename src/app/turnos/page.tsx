@@ -2,10 +2,9 @@ import Link from "next/link";
 import React, { JSX } from "react";
 
 const routes: { href: string; label: string }[] = [
-  { href: "/tlcrab/turnos/criar", label: "Criar Turno" },
-  { href: "/tlcrab/turnos/lista", label: "Listar Turnos" },
-  { href: "/tlcrab/turnos/calendario", label: "Calendario" },
-  { href: "/tlcrab/turnos/ajustes", label: "Ajustes" },
+  { href: "/turnos/criar", label: "Criar Turno" },
+  { href: "/turnos/lista", label: "Listar Turnos" },
+  { href: "/turnos/calendario", label: "Calendario" },
 ];
 
 export default function Page(): JSX.Element {
