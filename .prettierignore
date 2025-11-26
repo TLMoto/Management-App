@@ -11,3 +11,4 @@ out/
 public/
 *.mjs
 *.json
+.env

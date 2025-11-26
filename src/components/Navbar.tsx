@@ -20,7 +20,7 @@ const Navbar = () => {
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
   return (
-    <nav className="bg-black/20 backdrop-blur-sm shadow-sm">
+    <div className="absolute top-0 left-0 right-0 bg-black/20 backdrop-blur-sm shadow-sm">
       <div className="max-w-7xl mx-auto px-4 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* BACK BUTTON (only if NOT on home) */}
@@ -123,7 +123,7 @@ const Navbar = () => {
           </div>
         )}
       </div>
-    </nav>
+    </div>
   );
 };
 

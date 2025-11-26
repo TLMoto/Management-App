@@ -1,5 +1,6 @@
 "use client";
 
+import ProtectedPage from "@/src/components/ProtectedPage";
 import Link from "next/link";
 import { useState, useCallback, useRef, useEffect } from "react";
 
@@ -288,7 +289,7 @@ export default function TLCrab() {
   };
 
   return (
-    <>
+    <ProtectedPage>
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
@@ -513,6 +514,6 @@ export default function TLCrab() {
           )}
         </div>
       </main>
-    </>
+    </ProtectedPage>
   );
 }
