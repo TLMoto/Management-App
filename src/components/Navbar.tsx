@@ -11,16 +11,15 @@ const Navbar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navigation = [
-    { name: "Eventos", href: "/eventos" },
-    { name: "Turnos", href: "/turnos" },
+    { name: "Calendário", href: "/calendario" },
+    { name: "Gestão", href: "/gestao" },
     { name: "Pessoal", href: "/pessoal" },
-    { name: "Análise", href: "/analise" },
   ];
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
   return (
-    <div className="absolute top-0 left-0 right-0 bg-black/20 backdrop-blur-sm shadow-sm">
+    <div className="relative top-0 left-0 right-0 bg-black/20 backdrop-blur-sm shadow-sm">
       <div className="max-w-7xl mx-auto px-4 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* BACK BUTTON (only if NOT on home) */}
