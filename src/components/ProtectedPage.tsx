@@ -16,7 +16,7 @@ export default function ProtectedPage({ children }: ProtectedPageProps) {
     const savedId = localStorage.getItem("userId");
     if (!userId && !savedId) {
       // Redirect to login page
-      router.replace("/");
+      router.replace("/login");
     }
   }, [userId, router]);
 
