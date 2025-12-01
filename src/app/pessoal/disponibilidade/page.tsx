@@ -3,7 +3,7 @@
 import ProtectedPage from "@/src/components/ProtectedPage";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { getEvent, loginOrCreatePerson, updateAvailability } from "../../../lib/api";
-import { useUserId } from "@/src/components/UserIdProvider";
+import { useUser } from "@/src/components/UserProvider";
 
 interface TimeSlot {
   day: number;
@@ -38,9 +38,8 @@ export default function TLCrab() {
   const isMouseDown = useRef(false);
   const [isSelectingMode, setIsSelectingMode] = useState<boolean | null>(null);
 
-  const { userId } = useUserId();
-  const user = userId;
-  const selectedPerson = user ? `user-${user}` : "";
+  const { user } = useUser();
+  const selectedPerson = user ? `user-${user.istId}` : "";
 
   // Auto login when component mounts and user exists
   useEffect(() => {
@@ -52,11 +51,11 @@ export default function TLCrab() {
   // Auto login function
   const autoLoginUser = async () => {
     if (!user) return;
-    
+
     setIsLoading(true);
-    
+
     try {
-      const result = await loginOrCreatePerson(CRAB_EVENTS.presencial, user);
+      const result = await loginOrCreatePerson(CRAB_EVENTS.presencial, user.istId);
       setIsLoggedIn(true);
       
       // Load existing availability from CrabFit
@@ -109,7 +108,7 @@ export default function TLCrab() {
     });
 
     try {
-      await updateAvailability(CRAB_EVENTS.presencial, user, crabAvailability);
+      await updateAvailability(CRAB_EVENTS.presencial, user.istId, crabAvailability);
       console.log('Disponibilidade sincronizada automaticamente');
     } catch (error) {
       console.error('Erro na sincronização automática:', error);
@@ -333,9 +332,32 @@ export default function TLCrab() {
               >
                 {TIME_SLOTS.map((timeSlot, slotIndex) => (
                   <tr key={slotIndex}>
-                    <td className="w-20 px-4 py-1 whitespace-nowrap text-xs sm:text-sm font-medium text-gray-900 sticky left-0 z-10 bg-white border-r border-gray-200">
+                    <td className="px-4 z-9  whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white border-r">
+                      {/** Show start time - end time (end = next TIME_SLOTS index, wrapped) */}
                       {timeSlot.hour.toString().padStart(2, "0")}:
                       {timeSlot.minute.toString().padStart(2, "0")}
+                      -
+                      {(() => {
+                        // Determine next slot (30 minutes later). Use next index if available, otherwise compute wrap-around.
+                        const nextIndex = slotIndex + 1;
+                        let endHour: number;
+                        let endMinute: number;
+                        if (nextIndex < TIME_SLOTS.length) {
+                          endHour = TIME_SLOTS[nextIndex].hour;
+                          endMinute = TIME_SLOTS[nextIndex].minute;
+                        } else {
+                          // wrap to next day
+                          const totalMinutes = timeSlot.hour * 60 + timeSlot.minute + 30;
+                          endHour = Math.floor(totalMinutes / 60) % 24;
+                          endMinute = totalMinutes % 60;
+                        }
+                        return (
+                          <>
+                            {endHour.toString().padStart(2, "0")}:
+                            {endMinute.toString().padStart(2, "0")}
+                          </>
+                        );
+                      })()}
                     </td>
 
                     {DAYS.map((_, dayIndex) => {
@@ -383,7 +405,7 @@ export default function TLCrab() {
         {selectedPerson && user && isLoggedIn && (
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
-              Estatísticas (ID: {user})
+              Estatísticas de {user.nome}
             </h3>
 
             {(() => {
