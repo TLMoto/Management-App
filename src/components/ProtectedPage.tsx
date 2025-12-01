@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useUserId } from "@/src/components/UserIdProvider";
 import { useRouter } from "next/navigation";
 
@@ -11,17 +11,24 @@ interface ProtectedPageProps {
 export default function ProtectedPage({ children }: ProtectedPageProps) {
   const { userId } = useUserId();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const savedId = localStorage.getItem("userId");
+    // Mark component as mounted (client-side) so we don't access localStorage during server render
+    setMounted(true);
+
+    const savedId = typeof window !== "undefined" ? localStorage.getItem("userId") : null;
     if (!userId && !savedId) {
       // Redirect to login page
       router.replace("/login");
     }
   }, [userId, router]);
 
-  // Optionally show nothing while checking
-  if (!userId && !localStorage.getItem("userId")) {
+  // Render nothing until we've mounted on the client to avoid touching localStorage during SSR
+  if (!mounted) return null;
+
+  // If after mount there's still no user, hide content (useEffect will redirect)
+  if (!userId && typeof window !== "undefined" && !localStorage.getItem("userId")) {
     return null;
   }
 

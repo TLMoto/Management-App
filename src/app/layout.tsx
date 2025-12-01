@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Navbar from "../components/Navbar";
 import BackGroundLayout from "../components/BackGroundLayout";
+import { UserProvider } from "../components/UserProvider";
 import "./globals.css";
 import { UserIdProvider } from "../components/UserIdProvider";
 
@@ -29,12 +30,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <UserIdProvider>
-          <BackGroundLayout>
-            <Navbar />
-            {children}
-          </BackGroundLayout>
-        </UserIdProvider>
+          <UserProvider>
+            <BackGroundLayout>
+              <Navbar />
+              {children}
+            </BackGroundLayout>
+          </UserProvider>
       </body>
     </html>
   );

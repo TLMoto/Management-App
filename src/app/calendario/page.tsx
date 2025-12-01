@@ -3,6 +3,7 @@
 import ProtectedPage from "@/src/components/ProtectedPage";
 import Link from "next/link";
 import { useState, useCallback, useRef, useEffect } from "react";
+import { UserService } from "../../../api/airtable";
 
 interface TimeSlot {
   day: number;
@@ -20,14 +21,8 @@ interface AvailabilityData {
   [personId: string]: TimeSlot[];
 }
 
-// Dados mock - 5 pessoas
-const PEOPLE: Person[] = [
-  { id: "1", name: "João Silva", area: "Dynamics" },
-  { id: "2", name: "Maria Santos", area: "Electronics" },
-  { id: "3", name: "Pedro Costa", area: "Aerodynamics" },
-  { id: "4", name: "Ana Ferreira", area: "Business" },
-  { id: "5", name: "Carlos Oliveira", area: "Powertrain" },
-];
+// Users will be loaded from Airtable
+// const PEOPLE removed — data fetched via UserService.getAllUsers()
 
 const DAYS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
 const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => {
@@ -52,10 +47,14 @@ export default function TLCrab() {
 
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
-  const [filteredPeople, setFilteredPeople] = useState<Person[]>(PEOPLE);
+  const [users, setUsers] = useState<Person[]>([]);
+  const [filteredPeople, setFilteredPeople] = useState<Person[]>([]);
+  const [departments, setDepartments] = useState<string[]>([]);
 
   const isMouseDown = useRef(false);
   const [isSelectingMode, setIsSelectingMode] = useState<boolean | null>(null);
+  const visitedSlotsRef = useRef<string[]>([]); // order of slots changed during current drag
+  const originalStateRef = useRef<Map<string, boolean>>(new Map());
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -76,22 +75,69 @@ export default function TLCrab() {
     localStorage.setItem("tlcrab-availability", JSON.stringify(availability));
   }, [availability]);
 
-  // Filtrar pessoas baseado no termo de pesquisa
+  // Filtrar pessoas baseado no termo de pesquisa (case-insensitive + diacritic-insensitive)
   useEffect(() => {
-    let filtered = PEOPLE;
+    // Normalizes and removes diacritics, then lowercases for comparison
+    const normalize = (s: string) =>
+      s
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .toLocaleLowerCase();
 
-    if (searchTerm.trim() !== "") {
-      filtered = filtered.filter(person =>
-        person.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+    const q = normalize(searchTerm.trim());
+    let filtered = users;
+
+    // If there is a search term, match against name OR area (diacritic- & case-insensitive)
+    if (q !== "") {
+      filtered = filtered.filter(person => {
+        const name = normalize(person.name || "");
+        const area = normalize(person.area || "");
+        return name.includes(q) || area.includes(q);
+      });
     }
 
+    // Filter by area (diacritic- & case-insensitive exact match)
     if (selectedArea !== "") {
-      filtered = filtered.filter(person => person.area === selectedArea);
+      const areaFilter = normalize(selectedArea);
+      filtered = filtered.filter(person => normalize(person.area || "") === areaFilter);
     }
 
     setFilteredPeople(filtered);
-  }, [searchTerm, selectedArea]);
+  }, [searchTerm, selectedArea, users]);
+
+  // Load users from Airtable
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const all = await UserService.getAllUsers();
+        if (!mounted) return;
+        // map Airtable User -> Person shape used in this page
+        const mapped: Person[] = all.map(u => ({ id: u.id, name: u.nome, area: u.department }));
+        setUsers(mapped);
+        setFilteredPeople(mapped);
+      } catch (err) {
+        console.error("Failed to load users:", err);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+    // Load departments from Airtable
+    useEffect(() => {
+      let mounted = true;
+      (async () => {
+        try {
+          const deps = await UserService.getAllDepartments();
+          if (mounted) setDepartments(deps);
+        } catch (err) {
+          console.error("Failed to load departments:", err);
+        }
+      })();
+      return () => {
+        mounted = false;
+      };
+    }, []);
 
   // Fechar dropdown quando clicar fora
   useEffect(() => {
@@ -179,11 +225,34 @@ export default function TLCrab() {
       if (!selectedPerson) return;
 
       const currentlySelected = isSlotSelected(day, hour, minute);
-      setIsSelectingMode(!currentlySelected); // true = add, false = remove
+      const selecting = !currentlySelected; // true = add, false = remove
+      setIsSelectingMode(selecting);
       isMouseDown.current = true;
       setDragStart({ day, hour, minute });
 
-      toggleTimeSlot(day, hour, minute); // toggle first clicked slot
+      // initialize visited/originals for this drag
+      visitedSlotsRef.current = [];
+      originalStateRef.current = new Map();
+
+      const key = `${day}-${hour}-${minute}`;
+      originalStateRef.current.set(key, currentlySelected);
+      visitedSlotsRef.current.push(key);
+
+      // Apply the intended state (set or unset) instead of toggling blindly
+      setAvailability(prev => {
+        const personSlots = prev[selectedPerson] || [];
+        const exists = personSlots.some(s => s.day === day && s.hour === hour && s.minute === minute);
+        if (selecting) {
+          if (exists) return prev;
+          return { ...prev, [selectedPerson]: [...personSlots, { day, hour, minute }] };
+        } else {
+          if (!exists) return prev;
+          return {
+            ...prev,
+            [selectedPerson]: personSlots.filter(s => !(s.day === day && s.hour === hour && s.minute === minute)),
+          };
+        }
+      });
     },
     [isSlotSelected, selectedPerson, toggleTimeSlot]
   );
@@ -192,60 +261,95 @@ export default function TLCrab() {
     isMouseDown.current = false;
     setDragStart(null);
     setIsSelectingMode(null);
+    // clear visited/originals
+    visitedSlotsRef.current = [];
+    originalStateRef.current.clear();
   }, []);
 
   const handleMouseEnter = useCallback(
     (day: number, hour: number, minute: number) => {
-      if (!isMouseDown.current || !selectedPerson || !dragStart || isSelectingMode === null) return;
+      if (!isMouseDown.current || !selectedPerson || isSelectingMode === null) return;
 
-      const startDay = Math.min(dragStart.day, day);
-      const endDay = Math.max(dragStart.day, day);
-      const startSlotIndex = TIME_SLOTS.findIndex(
-        slot => slot.hour === dragStart.hour && slot.minute === dragStart.minute
-      );
-      const endSlotIndex = TIME_SLOTS.findIndex(
-        slot => slot.hour === hour && slot.minute === minute
-      );
-      const startSlot = Math.min(startSlotIndex, endSlotIndex);
-      const endSlot = Math.max(startSlotIndex, endSlotIndex);
+      const key = `${day}-${hour}-${minute}`;
+      const visited = visitedSlotsRef.current;
+      const originals = originalStateRef.current;
 
-      const newSlots: TimeSlot[] = [];
-      for (let d = startDay; d <= endDay; d++) {
-        for (let s = startSlot; s <= endSlot; s++) {
-          newSlots.push({ day: d, hour: TIME_SLOTS[s].hour, minute: TIME_SLOTS[s].minute });
+      const idx = visited.indexOf(key);
+
+      if (idx === -1) {
+        // New forward slot: record original state and apply selecting action
+        const currentlySelected = isSlotSelected(day, hour, minute);
+        originals.set(key, currentlySelected);
+        visited.push(key);
+
+        setAvailability(prev => {
+          const personSlots = prev[selectedPerson] || [];
+          const exists = personSlots.some(s => s.day === day && s.hour === hour && s.minute === minute);
+          if (isSelectingMode) {
+            if (exists) return prev;
+            return { ...prev, [selectedPerson]: [...personSlots, { day, hour, minute }] };
+          } else {
+            if (!exists) return prev;
+            return {
+              ...prev,
+              [selectedPerson]: personSlots.filter(s => !(s.day === day && s.hour === hour && s.minute === minute)),
+            };
+          }
+        });
+      } else {
+        // Already visited. If user moved back (i.e., key is earlier in stack), revert later visited slots until key is the last
+        while (visited.length > 0 && visited[visited.length - 1] !== key) {
+          const lastKey = visited.pop() as string;
+          const [ld, lh, lm] = lastKey.split("-").map(n => parseInt(n, 10));
+          const original = originals.get(lastKey) ?? false;
+          // revert lastKey to original
+          setAvailability(prev => {
+            const personSlots = prev[selectedPerson] || [];
+            const exists = personSlots.some(s => s.day === ld && s.hour === lh && s.minute === lm);
+            if (original) {
+              // should be selected
+              if (exists) return prev;
+              return { ...prev, [selectedPerson]: [...personSlots, { day: ld, hour: lh, minute: lm }] };
+            } else {
+              // should be not selected
+              if (!exists) return prev;
+              return {
+                ...prev,
+                [selectedPerson]: personSlots.filter(s => !(s.day === ld && s.hour === lh && s.minute === lm)),
+              };
+            }
+          });
+          originals.delete(lastKey);
         }
       }
-
-      setAvailability(prev => {
-        const personSlots = prev[selectedPerson] || [];
-        if (isSelectingMode) {
-          // Add mode
-          const merged = [...personSlots];
-          for (const slot of newSlots) {
-            if (
-              !merged.some(
-                s => s.day === slot.day && s.hour === slot.hour && s.minute === slot.minute
-              )
-            ) {
-              merged.push(slot);
-            }
-          }
-          return { ...prev, [selectedPerson]: merged };
-        } else {
-          // Remove mode
-          return {
-            ...prev,
-            [selectedPerson]: personSlots.filter(
-              s =>
-                !newSlots.some(
-                  slot => slot.day === s.day && slot.hour === s.hour && slot.minute === s.minute
-                )
-            ),
-          };
-        }
-      });
     },
-    [selectedPerson, dragStart, isSelectingMode]
+    [selectedPerson, isSelectingMode, isSlotSelected]
+  );
+
+  // Handle touch move by hit-testing the element under the touch point
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      if (!isMouseDown.current) return;
+      // Prevent page scroll while dragging
+      e.preventDefault();
+
+      const touch = e.touches[0];
+      if (!touch) return;
+      const el = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement | null;
+      if (!el) return;
+
+      const slotEl = el.closest('[data-slot="true"]') as HTMLElement | null;
+      if (!slotEl) return;
+
+      const day = parseInt(slotEl.dataset.day || "", 10);
+      const hour = parseInt(slotEl.dataset.hour || "", 10);
+      const minute = parseInt(slotEl.dataset.minute || "", 10);
+
+      if (Number.isFinite(day) && Number.isFinite(hour) && Number.isFinite(minute)) {
+        handleMouseEnter(day, hour, minute);
+      }
+    },
+    [handleMouseEnter]
   );
 
   const getSlotCount = (day: number, hour: number, minute: number) => {
@@ -260,7 +364,7 @@ export default function TLCrab() {
 
   const getSlotPercentage = (day: number, hour: number, minute: number) => {
     const count = getSlotCount(day, hour, minute);
-    const totalPeople = PEOPLE.length;
+    const totalPeople = users.length || 1; // avoid divide by zero
     return totalPeople ? Math.round((count / totalPeople) * 100) : 0;
   };
 
@@ -273,7 +377,7 @@ export default function TLCrab() {
     const peopleAtSlot: string[] = [];
     Object.entries(availability).forEach(([personId, slots]) => {
       if (slots.some(slot => slot.day === day && slot.hour === hour && slot.minute === minute)) {
-        const person = PEOPLE.find(p => p.id === personId);
+        const person = users.find(p => p.id === personId);
         if (person) peopleAtSlot.push(person.name);
       }
     });
@@ -293,7 +397,7 @@ export default function TLCrab() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-blue-500 mb-4">TLCrab - Gestão de Turnos</h1>
+          <h1 className="text-3xl font-bold text-blue-500 mb-4">TLCrab - Calendário de Turnos</h1>
 
           <div className="flex flex-wrap gap-4 mb-6">
             {/* Pessoa Filter */}
@@ -383,103 +487,123 @@ export default function TLCrab() {
                  focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-700"
               >
                 <option value="">Todas as Áreas</option>
-                {[...new Set(PEOPLE.map(p => p.area))].map(area => (
+                {departments.map(area => (
                   <option key={area} value={area}>
                     {area}
                   </option>
                 ))}
               </select>
             </div>
-
-            {/* Link to Analysis */}
-            <div className="bg-blue-50 p-4 rounded-lg shadow flex items-center justify-center min-w-64">
-              <div className="text-center">
-                <p className="text-sm text-blue-800 mb-2">Ver estatísticas e análise detalhada?</p>
-                <Link
-                  href="/tlcrab/analise"
-                  className="bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-md text-sm font-medium transition-colors inline-block"
-                >
-                  Ir para Análise
-                </Link>
-              </div>
-            </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow overflow-hidden mb-8">
-            <div className="p-4 border-b bg-gray-50">
-              <h2 className="text-lg font-semibold text-gray-900">Calendário de Edição</h2>
-              <p className="text-sm text-gray-600">
-                Selecione uma pessoa e clique/arraste para definir disponibilidade
-              </p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50">
-                      Hora
+           {/* Calendário */}
+        <div className="bg-white rounded-lg shadow mb-8 overflow-x-auto">
+
+          <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
+            <h2 className="text-lg font-semibold text-gray-900">Disponibilidade</h2>
+          </div>
+
+          <div className="relative">
+            <table className="min-w-full table-fixed">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="w-20 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 z-10 bg-gray-50 border-r border-gray-200">
+                    Hora
+                  </th>
+
+                  {DAYS.map((day, index) => (
+                    <th
+                      key={index}
+                      className="w-20 sm:w-24 md:w-28 px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      <div className="block sm:hidden">{day.substring(0, 3)}</div>
+                      <div className="hidden sm:block">{day}</div>
                     </th>
-                    {DAYS.map((day, index) => (
-                      <th
-                        key={index}
-                        className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]"
-                      >
-                        {day}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody
-                  className="bg-white divide-y divide-gray-200 select-none"
-                  onMouseUp={handleMouseUp}
-                  onMouseLeave={handleMouseUp}
-                >
-                  {TIME_SLOTS.map((timeSlot, slotIndex) => (
-                    <tr key={slotIndex}>
-                      <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white border-r">
-                        {timeSlot.hour.toString().padStart(2, "0")}:
-                        {timeSlot.minute.toString().padStart(2, "0")}
-                      </td>
-                      {DAYS.map((_, dayIndex) => {
-                        const count = getSlotCount(dayIndex, timeSlot.hour, timeSlot.minute);
-                        const isSelected = isSlotSelected(dayIndex, timeSlot.hour, timeSlot.minute);
-                        const people = getPeopleAtSlot(dayIndex, timeSlot.hour, timeSlot.minute);
-
-                        return (
-                          <td key={dayIndex} className="px-1 py-1">
-                            <div
-                              className={`
-                              h-8 w-full cursor-pointer border border-gray-200 transition-all duration-200 rounded
-                              ${isSelected ? "ring-2 ring-blue-500 bg-blue-100" : getSlotColor(dayIndex, timeSlot.hour, timeSlot.minute)}
-                              ${!selectedPerson ? "cursor-not-allowed opacity-50" : ""}
-                              flex items-center justify-center relative group
-                            `}
-                              onMouseDown={() =>
-                                handleMouseDown(dayIndex, timeSlot.hour, timeSlot.minute)
-                              }
-                              onMouseEnter={() =>
-                                handleMouseEnter(dayIndex, timeSlot.hour, timeSlot.minute)
-                              }
-                              title={`${DAYS[dayIndex]} ${timeSlot.hour.toString().padStart(2, "0")}:${timeSlot.minute.toString().padStart(2, "0")} - ${count} pessoas: ${people.join(", ")}`}
-                            >
-                              <span className="text-xs font-medium text-gray-700">
-                                {count || ""}
-                              </span>
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </tr>
+              </thead>
+
+              <tbody
+                className={`bg-white divide-y divide-gray-200 select-noneopacity-50 pointer-events-none`}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              >
+                {TIME_SLOTS.map((timeSlot, slotIndex) => (
+                  <tr key={slotIndex}>
+                    <td className="px-4 z-9  whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white border-r">
+                      {/** Show start time - end time (end = next TIME_SLOTS index, wrapped) */}
+                      {timeSlot.hour.toString().padStart(2, "0")}:
+                      {timeSlot.minute.toString().padStart(2, "0")}
+                      -
+                      {(() => {
+                        // Determine next slot (30 minutes later). Use next index if available, otherwise compute wrap-around.
+                        const nextIndex = slotIndex + 1;
+                        let endHour: number;
+                        let endMinute: number;
+                        if (nextIndex < TIME_SLOTS.length) {
+                          endHour = TIME_SLOTS[nextIndex].hour;
+                          endMinute = TIME_SLOTS[nextIndex].minute;
+                        } else {
+                          // wrap to next day
+                          const totalMinutes = timeSlot.hour * 60 + timeSlot.minute + 30;
+                          endHour = Math.floor(totalMinutes / 60) % 24;
+                          endMinute = totalMinutes % 60;
+                        }
+                        return (
+                          <>
+                            {endHour.toString().padStart(2, "0")}:
+                            {endMinute.toString().padStart(2, "0")}
+                          </>
+                        );
+                      })()}
+                    </td>
+
+                    {DAYS.map((_, dayIndex) => {
+                      const isSelected = isSlotSelected(dayIndex, timeSlot.hour, timeSlot.minute);
+
+                      return (
+                        <td key={dayIndex} className="w-20 sm:w-24 md:w-28 px-1 py-1">
+                          <div
+                            className={`
+                              h-8 sm:h-10 w-full cursor-pointer border border-gray-200 transition-all duration-200 rounded
+                              ${isSelected ? "ring-1 sm:ring-2 ring-blue-500 bg-blue-100" : "bg-gray-50 hover:bg-gray-100"}
+                              ${!selectedPerson ? "cursor-not-allowed opacity-50" : ""}
+                              flex items-center justify-center relative group touch-manipulation
+                            `}
+                            onMouseDown={() =>
+                              handleMouseDown(dayIndex, timeSlot.hour, timeSlot.minute)
+                            }
+                            onMouseEnter={() =>
+                              handleMouseEnter(dayIndex, timeSlot.hour, timeSlot.minute)
+                            }
+                            onTouchStart={() => {
+                                handleMouseDown(dayIndex, timeSlot.hour, timeSlot.minute);
+                              
+                            }}
+                            onTouchEnd={handleMouseUp}
+                            style={{ touchAction: 'none' }}
+                          >
+                            <span className="text-xs font-medium text-gray-700">
+                              {isSelected ? "✓" : ""}
+                            </span>
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+
+        </div>
+
+       
 
           {selectedPerson && (
             <div className="mt-8 bg-white rounded-lg shadow p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
-                Disponibilidade de {PEOPLE.find(p => p.id === selectedPerson)?.name}
+                Disponibilidade de {users.find(p => p.id === selectedPerson)?.name}
               </h3>
               {(() => {
                 const stats = getPersonStats(selectedPerson);
@@ -499,14 +623,7 @@ export default function TLCrab() {
                       </p>
                       <p className="text-sm text-gray-600">Slots Totais</p>
                     </div>
-                    <div className="text-center">
-                      <Link
-                        href="/tlcrab/analise"
-                        className="bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-md text-sm font-medium transition-colors inline-block"
-                      >
-                        Ver Análise Completa
-                      </Link>
-                    </div>
+                    
                   </div>
                 );
               })()}

@@ -1,7 +1,7 @@
 "use client";
 
 import ProtectedPage from "@/src/components/ProtectedPage";
-import { useUserId } from "@/src/components/UserIdProvider";
+import { useUser } from "@/src/components/UserProvider"; // Updated import
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { JSX } from "react";
@@ -13,19 +13,23 @@ const routes: { href: string; label: string; logout?: boolean }[] = [
 ];
 
 export default function Page(): JSX.Element {
-  const { userId, setUserId } = useUserId();
+  // 1. Get the full user object and the setter
+  const { user, setUser } = useUser();
   const router = useRouter();
 
   const handleLogout = () => {
-    setUserId("");
-    localStorage.removeItem("userId");
+    setUser(null); 
+    localStorage.removeItem("user");
     router.push("/login");
   };
 
   return (
     <ProtectedPage>
       <main className="min-h-screen flex flex-col items-center pt-20 px-4">
-        <h1 className="text-2xl font-semibold mb-8">Turnos de {userId}</h1>
+        {/* 3. Display the user's name instead of ID */}
+        <h1 className="text-2xl font-semibold mb-8">
+          Turnos de {user?.nome}
+        </h1>
 
         <div className="w-full max-w-md flex flex-col items-center gap-4">
           {routes.map(r =>

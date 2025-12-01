@@ -9,6 +9,7 @@ Airtable.configure({
 
 const base = Airtable.base('app9EghZV4Smh0lFi');
 
+
 const UserSchema = z.object({
   id: z.string(),
   nome: z.string().default('Sem Nome'),
@@ -61,4 +62,71 @@ export const UserService = {
       return null;
     }
   },
+
+  async getAllDepartments(): Promise<string[]> {
+    try {
+      const records = await base('Team')
+        .select({
+          view: 'Grid view',
+        })
+        .all();
+
+      const departmentsSet = new Set<string>();
+
+      records.forEach((record) => {
+        const department = record.get('Área');
+        if (typeof department === 'string' && department.trim() !== '') {
+          departmentsSet.add(department);
+        }
+      });
+
+      return Array.from(departmentsSet).sort();
+    } catch (error) {
+      console.error('Error fetching departments:', error);
+      return [];
+    }
+  },
+
+  async getAllUsers(): Promise<User[]> {
+    try {
+      const records = await base('Team')
+        .select({
+          view: 'Grid view',
+          sort: [{ field: 'Nome e Sobrenome', direction: 'asc' }],
+        })
+        .all();
+
+      const users: User[] = [];
+
+      records.forEach((record) => {
+        const rawData = {
+          id: record.id,
+          nome: record.get('Nome e Sobrenome'),
+          funcao: record.get('Função'),
+          department: record.get('Área'),
+          istId: record.get('IST ID'),
+        };
+
+        // Validate + normalize
+        const parsed = UserSchema.safeParse(rawData);
+
+        if (parsed.success) {
+          users.push(parsed.data);
+        } else {
+          console.warn(
+            '⚠️ Airtable user data validation failed. Issues:',
+            parsed.error.message,
+            '\nRaw data received:',
+            rawData
+          );
+        }
+      });
+
+      return users;
+    } catch (error) {
+      console.error('Error fetching all users:', error);
+      return [];
+    }
+  },
 };
+
