@@ -23,7 +23,7 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* BACK BUTTON (only if NOT on home) */}
-          {pathname !== "/" && (
+          {pathname !== "/" && pathname !== "/login" && (
             <button
               onClick={() => router.back()}
               className="p-2 mr-2 rounded-md text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white"

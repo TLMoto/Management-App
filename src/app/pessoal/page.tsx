@@ -9,7 +9,7 @@ import React, { JSX } from "react";
 const routes: { href: string; label: string; logout?: boolean }[] = [
   { href: "/pessoal/turnos", label: "Meus Turnos" },
   { href: "/pessoal/disponibilidade", label: "Minha Disponibilidade" },
-  { href: "/", label: "Logout", logout: true },
+  { href: "/login", label: "Logout", logout: true },
 ];
 
 export default function Page(): JSX.Element {
@@ -19,7 +19,7 @@ export default function Page(): JSX.Element {
   const handleLogout = () => {
     setUserId("");
     localStorage.removeItem("userId");
-    router.push("/");
+    router.push("/login");
   };
 
   return (
