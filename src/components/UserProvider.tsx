@@ -40,7 +40,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   // When value changes, save to (or remove from) localStorage
   const setUser = (newUser: User | null) => {
     setUserState(newUser);
-    
+
     if (newUser) {
       // Store object as a JSON string
       localStorage.setItem("user", JSON.stringify(newUser));
@@ -50,8 +50,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  return <UserContext.Provider value={{ user, setUser }}>{children}</UserContext.Provider>
-
+  return <UserContext.Provider value={{ user, setUser }}>{children}</UserContext.Provider>;
 }
 
 export function useUser() {
@@ -59,7 +58,6 @@ export function useUser() {
 }
 
 export function hasPermission(role: string): boolean {
-    const regex = /^(Sublíder|Líder)(?: de .+)?$/;
-    return regex.test(role);
+  const regex = /^(Sublíder|Líder)(?: de .+)?$/;
+  return regex.test(role);
 }
-
