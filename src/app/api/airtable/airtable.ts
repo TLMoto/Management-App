@@ -90,14 +90,17 @@ export const ControloPresencasService = {
         return parsed.data;
       });
 
-      return users.filter((u): u is User => u !== null);
+      // Filter out invalid/null entries, then sort by `nome` ascending (locale-aware)
+      const validUsers = users.filter((u): u is User => u !== null);
+      validUsers.sort((a, b) => a.nome.localeCompare(b.nome, 'pt', { sensitivity: 'base' }));
+      return validUsers;
     } catch (error) {
       console.error('Error fetching all users:', error);
       return null;
     }
   },
 
-  async getAllDepartments(): Promise<Set<string>> {
+  async getAllDepartments(): Promise<string[]> {
     try {
       const records = await base('Controlo de Presenças')
         .select({
@@ -110,10 +113,10 @@ export const ControloPresencasService = {
 
       const stringSet = new Set(flatValues.map(item => String(item)));
 
-      return stringSet;
+      return Array.from(stringSet);
     } catch (error) {
       console.error('Error fetching departamentos:', error);
-      return new Set();
+      return [];
     }
   },
 };
