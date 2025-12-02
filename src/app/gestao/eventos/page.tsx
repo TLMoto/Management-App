@@ -4,7 +4,15 @@ import ProtectedPage from "@/src/components/ProtectedPage";
 import Link from "next/link";
 import React, { JSX } from "react";
 
-const routes: { href: string; label: string; logout?: boolean }[] = [
+interface Evento {
+  id: string;
+  area: string[];
+  pessoas: string[];
+  data_inicio: string;
+  data_fim: string;
+}
+
+const routes: { href: string; label: string }[] = [
   { href: "/gestao/turnos", label: "Atribuir Turno" },
   { href: "/gestao/eventos", label: "Criar Evento" },
   { href: "/gestao/estatisticas", label: "Estatísticas" },

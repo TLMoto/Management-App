@@ -1,6 +1,5 @@
 import Airtable from 'airtable';
 import { z } from 'zod';
-import { ca } from 'zod/locales';
 
 // Use the Airtable API key and base ID from environment variables
 Airtable.configure({
@@ -70,7 +69,6 @@ export const ControloPresencasService = {
     try {
       const records = await base('Controlo de Presenças').select({}).all();
       const users = records.map(record => {
-
         const rawFuncao = record.get('Função');
         const safeFuncao = Array.isArray(rawFuncao) ? rawFuncao[0] : rawFuncao;
 
@@ -97,16 +95,15 @@ export const ControloPresencasService = {
       console.error('Error fetching all users:', error);
       return null;
     }
-
   },
 
-  async getAllDepartamentos(): Promise<Set<String> | null> {
+  async getAllDepartments(): Promise<Set<string>> {
     try {
       const records = await base('Controlo de Presenças')
         .select({
           fields: ['Área'],
-
-        }).all();
+        })
+        .all();
 
       const allValues = records.map(record => record.get('Área'));
       const flatValues = allValues.flat().filter(v => v !== undefined && v !== null);
@@ -114,12 +111,11 @@ export const ControloPresencasService = {
       const stringSet = new Set(flatValues.map(item => String(item)));
 
       return stringSet;
-
     } catch (error) {
       console.error('Error fetching departamentos:', error);
-      return null;
+      return new Set();
     }
-  }
+  },
 };
 
 const EventoAtivoSchema = z.object({
@@ -137,12 +133,9 @@ export type EventoAtivo = z.infer<typeof EventoAtivoSchema>;
 export const EventosAtivosService = {
   async getEventosAtivos(): Promise<EventoAtivo[] | null> {
     try {
-      const records = await base('Eventos Ativos').select({
-
-      }).all()
+      const records = await base('Eventos Ativos').select({}).all();
 
       const results = records.map(record => {
-
         const rawArea = record.get('Area');
         const safeArea = Array.isArray(rawArea) ? rawArea[0] : rawArea;
         const rawData = {
@@ -163,13 +156,11 @@ export const EventosAtivosService = {
         return result.data;
       });
       return results.filter((r): r is EventoAtivo => r !== null);
-
     } catch (error) {
       console.error('Error fetching eventos ativos:', error);
       return null;
     }
-  }
-
+  },
 };
 
 const TurnoAtivoSchema = z.object({
@@ -188,11 +179,8 @@ export type TurnoAtivo = z.infer<typeof TurnoAtivoSchema>;
 export const TurnosAtivosService = {
   async getTurnosAtivos(): Promise<TurnoAtivo[] | null> {
     try {
-      const records = await base('Turnos Ativos').select({
-
-      }).all();
+      const records = await base('Turnos Ativos').select({}).all();
       const results = records.map(record => {
-
         const rawEvento = record.get('Evento');
         const safeEvento = Array.isArray(rawEvento) ? rawEvento[0] : rawEvento;
         const rawNome = record.get('Nome');
@@ -220,7 +208,6 @@ export const TurnosAtivosService = {
         return result.data;
       });
       return results.filter((r): r is TurnoAtivo => r !== null);
-
     } catch (error) {
       console.error('Error fetching turnos ativos:', error);
       return null;
@@ -229,9 +216,11 @@ export const TurnosAtivosService = {
 
   async getTurnosAtivosPorDepartamento(departamento: string): Promise<TurnoAtivo[] | null> {
     try {
-      const records = await base('Turnos Ativos').select({
-        filterByFormula: `{Área (from Nome)} = '${departamento}'`
-      }).all();
+      const records = await base('Turnos Ativos')
+        .select({
+          filterByFormula: `{Área (from Nome)} = '${departamento}'`,
+        })
+        .all();
 
       const results = records.map(record => {
         const rawEvento = record.get('Evento');
@@ -270,11 +259,12 @@ export const TurnosAtivosService = {
   async getTurnosAtivosPorPessoa(istId: number): Promise<TurnoAtivo[] | null> {
     try {
       const searchId = String(istId);
-      const records = await base('Turnos Ativos').select({
-        filterByFormula: `SEARCH('${searchId}', {IST ID (from Nome)} & "") > 0`
-      }).all();
+      const records = await base('Turnos Ativos')
+        .select({
+          filterByFormula: `SEARCH('${searchId}', {IST ID (from Nome)} & "") > 0`,
+        })
+        .all();
       const results = records.map(record => {
-
         const rawEvento = record.get('Evento');
         const safeEvento = Array.isArray(rawEvento) ? rawEvento[0] : rawEvento;
         const rawIst = record.get('IST ID (from Nome)');
@@ -295,18 +285,9 @@ export const TurnosAtivosService = {
         return result.data;
       });
       return results.filter((r): r is TurnoAtivo => r !== null);
-
     } catch (error) {
       console.error('Error fetching turnos ativos:', error);
       return null;
     }
-  }
-
-
+  },
 };
-
-
-
-
-
-

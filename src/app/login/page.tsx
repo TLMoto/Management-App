@@ -1,25 +1,26 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useUserId } from "../../components/UserIdProvider";
+import { useUser } from "../../components/UserProvider";
 import { useRouter } from "next/navigation";
-import { UserService } from "../../../api/airtable";
+import { ControloPresencasService } from "../api/airtable/airtable";
 
 export default function Login() {
-  const { userId, setUserId } = useUserId();
+  const { user, setUser } = useUser();
   const [input, setInput] = useState("");
   const router = useRouter();
 
   useEffect(() => {
-    const savedId = localStorage.getItem("userId");
+    const savedId = localStorage.getItem("user");
     if (savedId) {
       setInput(savedId);
     }
-  }, [setUserId]);
+  }, [setUser]);
 
   const handleLogin = async () => {
     if (input.trim() !== "") {
-      if (await UserService.getUser(Number(input))) {
-        setUserId(input);
+      const user = await ControloPresencasService.getUserByIstId(Number(input));
+      if (user) {
+        setUser(user);
         router.push("/pessoal");
       } else {
         alert("Número IST inválido. Tente novamente.");

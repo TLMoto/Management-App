@@ -2,7 +2,7 @@
 
 import ProtectedPage from "@/src/components/ProtectedPage";
 import { useState, useCallback, useRef, useEffect } from "react";
-import { getEvent, loginOrCreatePerson, updateAvailability } from "../../../lib/api";
+import { getEvent, loginOrCreatePerson, updateAvailability } from "../../api/crab/api";
 import { useUser } from "@/src/components/UserProvider";
 
 interface TimeSlot {
@@ -25,13 +25,15 @@ const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => {
 });
 
 // ID dos crabfits
-const CRAB_EVENTS = { 
-  presencial: 'tlmotopresencial-669665'  
+const CRAB_EVENTS = {
+  presencial: "tlmotopresencial-669665",
 };
 
 export default function TLCrab() {
   const [availability, setAvailability] = useState<AvailabilityData>({});
-  const [dragStart, setDragStart] = useState<{ day: number; hour: number; minute: number } | null>(null);
+  const [dragStart, setDragStart] = useState<{ day: number; hour: number; minute: number } | null>(
+    null
+  );
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -43,75 +45,75 @@ export default function TLCrab() {
 
   // Auto login when component mounts and user exists
   useEffect(() => {
+    // Convert CrabFit availability format to local TimeSlot format
+    const loadAvailabilityFromCrabFit = (crabAvailability: string[]) => {
+      const timeSlots: TimeSlot[] = [];
+
+      crabAvailability.forEach(slot => {
+        // Format: "HHMM-D" (e.g., "0800-1" for Monday 08:00)
+        const match = slot.match(/^(\d{2})(\d{2})-(\d+)$/);
+        if (match) {
+          const hour = parseInt(match[1]);
+          const minute = parseInt(match[2]);
+          const day = parseInt(match[3]);
+          timeSlots.push({ day, hour, minute });
+        }
+      });
+
+      if (timeSlots.length > 0 && selectedPerson) {
+        setAvailability(prev => ({
+          ...prev,
+          [selectedPerson]: timeSlots,
+        }));
+      }
+    };
+
+    // Auto login function
+    const autoLoginUser = async () => {
+      if (!user) return;
+
+      setIsLoading(true);
+
+      try {
+        const result = await loginOrCreatePerson(CRAB_EVENTS.presencial, user.istId.toString());
+        setIsLoggedIn(true);
+
+        // Load existing availability from CrabFit
+        if (result.availability && result.availability.length > 0) {
+          loadAvailabilityFromCrabFit(result.availability);
+        }
+
+        console.log("Login automático OK:", result);
+      } catch (error) {
+        console.error("Erro no login automático:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     if (user && !isLoggedIn) {
       autoLoginUser();
     }
-  }, [user]);
-
-  // Auto login function
-  const autoLoginUser = async () => {
-    if (!user) return;
-
-    setIsLoading(true);
-
-    try {
-      const result = await loginOrCreatePerson(CRAB_EVENTS.presencial, user.istId);
-      setIsLoggedIn(true);
-      
-      // Load existing availability from CrabFit
-      if (result.availability && result.availability.length > 0) {
-        loadAvailabilityFromCrabFit(result.availability);
-      }
-      
-      console.log('Login automático OK:', result);
-    } catch (error) {
-      console.error('Erro no login automático:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Convert CrabFit availability format to local TimeSlot format
-  const loadAvailabilityFromCrabFit = (crabAvailability: string[]) => {
-    const timeSlots: TimeSlot[] = [];
-    
-    crabAvailability.forEach(slot => {
-      // Format: "HHMM-D" (e.g., "0800-1" for Monday 08:00)
-      const match = slot.match(/^(\d{2})(\d{2})-(\d+)$/);
-      if (match) {
-        const hour = parseInt(match[1]);
-        const minute = parseInt(match[2]);
-        const day = parseInt(match[3]);
-        timeSlots.push({ day, hour, minute });
-      }
-    });
-
-    if (timeSlots.length > 0 && selectedPerson) {
-      setAvailability(prev => ({
-        ...prev,
-        [selectedPerson]: timeSlots
-      }));
-    }
-  };
+  }, [isLoggedIn, selectedPerson, user]);
 
   // Sync availability to CrabFit
   const syncAvailability = async () => {
     if (!user || !isLoggedIn || !selectedPerson) return;
 
     const personSlots = availability[selectedPerson] || [];
-    
+
     // Convert local slots to CrabFit format
     const crabAvailability = personSlots.map(slot => {
-      const hourStr = slot.hour.toString().padStart(2, '0');
-      const minuteStr = slot.minute.toString().padStart(2, '0');
+      const hourStr = slot.hour.toString().padStart(2, "0");
+      const minuteStr = slot.minute.toString().padStart(2, "0");
       return `${hourStr}${minuteStr}-${slot.day}`;
     });
 
     try {
-      await updateAvailability(CRAB_EVENTS.presencial, user.istId, crabAvailability);
-      console.log('Disponibilidade sincronizada automaticamente');
+      await updateAvailability(CRAB_EVENTS.presencial, user.istId.toString(), crabAvailability);
+      console.log("Disponibilidade sincronizada automaticamente");
     } catch (error) {
-      console.error('Erro na sincronização automática:', error);
+      console.error("Erro na sincronização automática:", error);
     }
   };
 
@@ -124,9 +126,9 @@ export default function TLCrab() {
 
     try {
       await syncAvailability();
-      console.log('Sincronização manual OK');
+      console.log("Sincronização manual OK");
     } catch (error) {
-      console.error('Erro na sincronização:', error);
+      console.error("Erro na sincronização:", error);
     }
   };
 
@@ -279,16 +281,15 @@ export default function TLCrab() {
     );
   }
 
-    return (
+  return (
     <ProtectedPage>
       <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <h1 className="text-3xl font-bold text-blue-500 mb-8 mt-8 relative z-30">
-          TLCrab - Gestão de Turnos
+          Minha Disponibilidade
         </h1>
 
         {/* Calendário */}
         <div className="bg-white rounded-lg shadow mb-8 overflow-x-auto">
-
           <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
             <h2 className="text-lg font-semibold text-gray-900">Disponibilidade</h2>
 
@@ -325,7 +326,7 @@ export default function TLCrab() {
 
               <tbody
                 className={`bg-white divide-y divide-gray-200 select-none ${
-                  !isLoggedIn ? 'opacity-50 pointer-events-none' : ''
+                  !isLoggedIn ? "opacity-50 pointer-events-none" : ""
                 }`}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
@@ -335,8 +336,7 @@ export default function TLCrab() {
                     <td className="px-4 z-9  whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white border-r">
                       {/** Show start time - end time (end = next TIME_SLOTS index, wrapped) */}
                       {timeSlot.hour.toString().padStart(2, "0")}:
-                      {timeSlot.minute.toString().padStart(2, "0")}
-                      -
+                      {timeSlot.minute.toString().padStart(2, "0")}-
                       {(() => {
                         // Determine next slot (30 minutes later). Use next index if available, otherwise compute wrap-around.
                         const nextIndex = slotIndex + 1;
@@ -373,10 +373,12 @@ export default function TLCrab() {
                               flex items-center justify-center relative group touch-manipulation
                             `}
                             onMouseDown={() =>
-                              isLoggedIn && handleMouseDown(dayIndex, timeSlot.hour, timeSlot.minute)
+                              isLoggedIn &&
+                              handleMouseDown(dayIndex, timeSlot.hour, timeSlot.minute)
                             }
                             onMouseEnter={() =>
-                              isLoggedIn && handleMouseEnter(dayIndex, timeSlot.hour, timeSlot.minute)
+                              isLoggedIn &&
+                              handleMouseEnter(dayIndex, timeSlot.hour, timeSlot.minute)
                             }
                             onTouchStart={() => {
                               if (isLoggedIn) {
@@ -384,7 +386,7 @@ export default function TLCrab() {
                               }
                             }}
                             onTouchEnd={handleMouseUp}
-                            style={{ touchAction: 'none' }}
+                            style={{ touchAction: "none" }}
                           >
                             <span className="text-xs font-medium text-gray-700">
                               {isSelected ? "✓" : ""}
@@ -398,15 +400,12 @@ export default function TLCrab() {
               </tbody>
             </table>
           </div>
-
         </div>
 
         {/* Estatísticas */}
         {selectedPerson && user && isLoggedIn && (
           <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">
-              Estatísticas de {user.nome}
-            </h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Estatísticas de {user.nome}</h3>
 
             {(() => {
               const stats = getPersonStats(selectedPerson);
@@ -433,7 +432,6 @@ export default function TLCrab() {
             })()}
           </div>
         )}
-
       </main>
     </ProtectedPage>
   );
