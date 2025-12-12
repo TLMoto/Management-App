@@ -29,7 +29,7 @@ const CRAB_EVENTS = {
   presencial: "tlmotopresencial-669665",
 };
 
-export default function TLCrab() {
+export default function Disponibilidade() {
   const [availability, setAvailability] = useState<AvailabilityData>({});
   const [dragStart, setDragStart] = useState<{ day: number; hour: number; minute: number } | null>(
     null
@@ -122,7 +122,6 @@ export default function TLCrab() {
     if (!user || !isLoggedIn || !selectedPerson) return;
 
     const personSlots = availability[selectedPerson] || [];
-    if (personSlots.length === 0) return;
 
     try {
       await syncAvailability();
@@ -387,11 +386,7 @@ export default function TLCrab() {
                             }}
                             onTouchEnd={handleMouseUp}
                             style={{ touchAction: "none" }}
-                          >
-                            <span className="text-xs font-medium text-gray-700">
-                              {isSelected ? "✓" : ""}
-                            </span>
-                          </div>
+                          ></div>
                         </td>
                       );
                     })}

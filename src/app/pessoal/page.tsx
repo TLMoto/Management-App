@@ -1,7 +1,7 @@
 "use client";
 
 import ProtectedPage from "@/src/components/ProtectedPage";
-import { useUser } from "@/src/components/UserProvider"; // Updated import
+import { useUser } from "@/src/components/UserProvider";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { JSX } from "react";
@@ -15,8 +15,7 @@ const routes = [
 const baseClasses =
   "block w-full text-center px-6 py-3 rounded-lg font-medium shadow-md transition-colors focus:outline-none";
 
-export default function Page(): JSX.Element {
-  // 1. Get the full user object and the setter
+export default function Pessoal(): JSX.Element {
   const { user, setUser } = useUser();
   const router = useRouter();
 
@@ -53,7 +52,6 @@ export default function Page(): JSX.Element {
   return (
     <ProtectedPage>
       <main className="min-h-screen flex flex-col items-center pt-20 px-4">
-        {/* 3. Display the user's name instead of ID */}
         <h1 className="text-2xl font-semibold mb-8">Turnos de {user?.nome}</h1>
 
         <div className="w-full max-w-md flex flex-col items-center gap-4">

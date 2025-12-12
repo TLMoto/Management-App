@@ -30,7 +30,7 @@ export const ControloPresencasService = {
         })
         .firstPage();
 
-      if (!records || records.length === 0) return null;
+      if (!records || records.length === 0) throw new Error('No user found with the given IST ID');
 
       const record = records[0];
 
@@ -55,7 +55,7 @@ export const ControloPresencasService = {
           '\nRaw data received:',
           rawData
         );
-        return null;
+        throw new Error('Airtable user data validation failed');
       }
 
       return parsed.data;
@@ -65,7 +65,7 @@ export const ControloPresencasService = {
     }
   },
 
-  async getAllUsers(): Promise<User[] | null> {
+  async getAllUsers(): Promise<User[]> {
     try {
       const records = await base('Controlo de Presenças').select({}).all();
       const users = records.map(record => {
@@ -84,7 +84,7 @@ export const ControloPresencasService = {
 
         if (!parsed.success) {
           console.error(`Validation failed for record ${record.id}:`, parsed.error);
-          return null;
+          return [];
         }
 
         return parsed.data;
@@ -96,7 +96,7 @@ export const ControloPresencasService = {
       return validUsers;
     } catch (error) {
       console.error('Error fetching all users:', error);
-      return null;
+      return [];
     }
   },
 
@@ -123,9 +123,8 @@ export const ControloPresencasService = {
 
 const EventoAtivoSchema = z.object({
   id: z.string(),
-  idEvento: z.string().default('Sem ID Evento'),
-  area: z.string().default('Sem Área'),
-  pessoasIndividuais: z.array(z.string()).default(['Sem Pessoas']),
+  nome: z.string().default('Sem Nome'),
+  participantes: z.array(z.string()).default(['Sem Pessoas']),
   dataInicio: z.string().default('Sem Data'),
   dataFim: z.string().default('Sem Data'),
   turnosAtivos: z.array(z.string()).default(['Sem Turnos']),
@@ -138,17 +137,15 @@ export const EventosAtivosService = {
     try {
       const records = await base('Eventos Ativos').select({}).all();
 
+      console.log('Airtable Eventos Ativos records fetched:', records);
+
       const results = records.map(record => {
-        const rawArea = record.get('Area');
-        const safeArea = Array.isArray(rawArea) ? rawArea[0] : rawArea;
         const rawData = {
           id: record.id,
-          idEvento: record.get('ID Evento'),
-          area: safeArea,
-          pessoasIndividuais: record.get('Pessoa Individuais'),
+          nome: record.get('Nome'),
+          participantes: record.get('Participantes'),
           dataInicio: record.get('Data Início'),
           dataFim: record.get('Data Fim'),
-          turnosAtivos: record.get('Turnos Ativos'),
         };
         const result = EventoAtivoSchema.safeParse(rawData);
 
@@ -162,6 +159,33 @@ export const EventosAtivosService = {
     } catch (error) {
       console.error('Error fetching eventos ativos:', error);
       return null;
+    }
+  },
+
+  async criarEvento(evento: { nome: string; dataInicio: string; dataFim: string }): Promise<void> {
+    try {
+      await base('Eventos Ativos').create([
+        {
+          fields: {
+            // eslint-disable-next-line prettier/prettier
+            'Nome': evento.nome,
+            'Data Início': evento.dataInicio,
+            'Data Fim': evento.dataFim,
+          },
+        },
+      ]);
+    } catch (error) {
+      console.error('Error creating evento:', error);
+      throw error;
+    }
+  },
+
+  async apagarEvento(eventoId: string): Promise<void> {
+    try {
+      await base('Eventos Ativos').destroy([eventoId]);
+    } catch (error) {
+      console.error('Error deleting evento:', error);
+      throw error;
     }
   },
 };
