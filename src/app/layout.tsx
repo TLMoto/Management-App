@@ -4,6 +4,7 @@ import Navbar from "../components/Navbar";
 import BackGroundLayout from "../components/BackGroundLayout";
 import { UserProvider } from "../components/UserProvider";
 import "./globals.css";
+import { MemberProvider } from "../components/MemberProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,10 +31,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <UserProvider>
-          <BackGroundLayout>
-            <Navbar />
-            {children}
-          </BackGroundLayout>
+          <MemberProvider>
+            <BackGroundLayout>
+              <Navbar />
+              {children}
+            </BackGroundLayout>
+          </MemberProvider>
         </UserProvider>
       </body>
     </html>

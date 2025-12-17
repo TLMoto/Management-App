@@ -1,27 +1,22 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect } from "react";
-
-// 1. Define the User Interface based on your requirements
-export interface User {
-  id: string;
-  nome: string;
-  funcao: string;
-  department: string;
-  istId: number; // TypeScript uses 'number' for integers
-}
+import { User } from "../app/api/airtable/airtable";
 
 // 3. Create the Context
 const UserContext = createContext<{
   user: User | null;
   setUser: (user: User | null) => void;
+  isLoading: boolean;
 }>({
   user: null,
   setUser: () => {},
+  isLoading: true, // Default to loading
 });
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUserState] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true); // Track loading state
 
   // Load from localStorage ONCE when app loads
   useEffect(() => {
@@ -35,6 +30,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem("user"); // Clean up corrupt data
       }
     }
+    setIsLoading(false); // Loading complete
   }, []);
 
   // When value changes, save to (or remove from) localStorage
@@ -50,7 +46,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  return <UserContext.Provider value={{ user, setUser }}>{children}</UserContext.Provider>;
+  return (
+    <UserContext.Provider value={{ user, setUser, isLoading }}>{children}</UserContext.Provider>
+  );
 }
 
 export function useUser() {

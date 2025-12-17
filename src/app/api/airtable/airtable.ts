@@ -1,5 +1,12 @@
 import Airtable from 'airtable';
-import { z } from 'zod';
+import {
+  UserSchema,
+  User,
+  EventoAtivoSchema,
+  EventoAtivo,
+  TurnoAtivoSchema,
+  TurnoAtivo,
+} from '../../../components/Interfaces';
 
 // Use the Airtable API key and base ID from environment variables
 Airtable.configure({
@@ -8,16 +15,6 @@ Airtable.configure({
 });
 
 const base = Airtable.base('appPg51nD6h3RpEK2');
-
-const UserSchema = z.object({
-  id: z.string(),
-  nome: z.string().default('Sem Nome'),
-  funcao: z.string().default('Sem Função'),
-  department: z.string().default('Sem Departamento'),
-  istId: z.number().or(z.string()).transform(Number),
-});
-
-export type User = z.infer<typeof UserSchema>;
 
 export const ControloPresencasService = {
   async getUserByIstId(istId: number): Promise<User | null> {
@@ -30,7 +27,7 @@ export const ControloPresencasService = {
         })
         .firstPage();
 
-      if (!records || records.length === 0) return null;
+      if (!records || records.length === 0) throw new Error('No user found with the given IST ID');
 
       const record = records[0];
 
@@ -55,7 +52,7 @@ export const ControloPresencasService = {
           '\nRaw data received:',
           rawData
         );
-        return null;
+        throw new Error('Airtable user data validation failed');
       }
 
       return parsed.data;
@@ -65,7 +62,7 @@ export const ControloPresencasService = {
     }
   },
 
-  async getAllUsers(): Promise<User[] | null> {
+  async getAllUsers(): Promise<User[]> {
     try {
       const records = await base('Controlo de Presenças').select({}).all();
       const users = records.map(record => {
@@ -84,7 +81,7 @@ export const ControloPresencasService = {
 
         if (!parsed.success) {
           console.error(`Validation failed for record ${record.id}:`, parsed.error);
-          return null;
+          return [];
         }
 
         return parsed.data;
@@ -96,7 +93,7 @@ export const ControloPresencasService = {
       return validUsers;
     } catch (error) {
       console.error('Error fetching all users:', error);
-      return null;
+      return [];
     }
   },
 
@@ -121,34 +118,24 @@ export const ControloPresencasService = {
   },
 };
 
-const EventoAtivoSchema = z.object({
-  id: z.string(),
-  idEvento: z.string().default('Sem ID Evento'),
-  area: z.string().default('Sem Área'),
-  pessoasIndividuais: z.array(z.string()).default(['Sem Pessoas']),
-  dataInicio: z.string().default('Sem Data'),
-  dataFim: z.string().default('Sem Data'),
-  turnosAtivos: z.array(z.string()).default(['Sem Turnos']),
-});
-
-export type EventoAtivo = z.infer<typeof EventoAtivoSchema>;
-
 export const EventosAtivosService = {
   async getEventosAtivos(): Promise<EventoAtivo[] | null> {
     try {
-      const records = await base('Eventos Ativos').select({}).all();
+      const records = await base('Eventos Ativos')
+        .select({
+          view: 'Grid view',
+        })
+        .all();
+
+      console.log('Airtable Eventos Ativos records fetched:', records);
 
       const results = records.map(record => {
-        const rawArea = record.get('Area');
-        const safeArea = Array.isArray(rawArea) ? rawArea[0] : rawArea;
         const rawData = {
           id: record.id,
-          idEvento: record.get('ID Evento'),
-          area: safeArea,
-          pessoasIndividuais: record.get('Pessoa Individuais'),
+          nome: record.get('Nome'),
+          participantes: record.get('Participantes'),
           dataInicio: record.get('Data Início'),
           dataFim: record.get('Data Fim'),
-          turnosAtivos: record.get('Turnos Ativos'),
         };
         const result = EventoAtivoSchema.safeParse(rawData);
 
@@ -164,43 +151,55 @@ export const EventosAtivosService = {
       return null;
     }
   },
+
+  async criarEvento(evento: { nome: string; dataInicio: string; dataFim: string }): Promise<void> {
+    try {
+      await base('Eventos Ativos').create([
+        {
+          fields: {
+            // eslint-disable-next-line prettier/prettier
+            'Nome': evento.nome,
+            'Data Início': evento.dataInicio,
+            'Data Fim': evento.dataFim,
+          },
+        },
+      ]);
+    } catch (error) {
+      console.error('Error creating evento:', error);
+      throw error;
+    }
+  },
+
+  async apagarEvento(eventoId: string): Promise<void> {
+    try {
+      await base('Eventos Ativos').destroy([eventoId]);
+    } catch (error) {
+      console.error('Error deleting evento:', error);
+      throw error;
+    }
+  },
 };
-
-const TurnoAtivoSchema = z.object({
-  id: z.string(),
-  idTurno: z.string().default('Sem ID Turno'),
-  nome: z.string().default('Sem Nome'),
-  evento: z.string().default('Sem Evento'),
-  istIds: z.string().default('Sem IST Id'),
-  dataInicio: z.string().default('Sem Data'),
-  dataFim: z.string().default('Sem Data'),
-  area: z.string().default('Sem Área'),
-});
-
-export type TurnoAtivo = z.infer<typeof TurnoAtivoSchema>;
 
 export const TurnosAtivosService = {
   async getTurnosAtivos(): Promise<TurnoAtivo[] | null> {
     try {
-      const records = await base('Turnos Ativos').select({}).all();
+      const records = await base('Turnos Ativos')
+        .select({
+          view: 'Grid view',
+        })
+        .all();
       const results = records.map(record => {
         const rawEvento = record.get('Evento');
-        const safeEvento = Array.isArray(rawEvento) ? rawEvento[0] : rawEvento;
-        const rawNome = record.get('Nome');
-        const safeNome = Array.isArray(rawNome) ? rawNome[0] : rawNome;
-        const rawIst = record.get('IST ID (from Nome)');
-        const safeIst = Array.isArray(rawIst) ? rawIst[0] : rawIst;
-        const rawArea = record.get('Área (from Evento)');
-        const safeArea = Array.isArray(rawArea) ? rawArea[0] : rawArea;
+        const safeEvento = Array.isArray(rawEvento) && rawEvento.length > 0 ? rawEvento[0] : [];
+        const rawParticipantes = record.get('Participantes');
+        const safeParticipantes = rawParticipantes;
         const rawData = {
           id: record.id,
           idTurno: record.get('ID Turno')?.toString(),
-          nome: safeNome,
+          participantes: safeParticipantes,
           evento: safeEvento,
-          istIds: safeIst.toString(),
           dataInicio: record.get('Data Início'),
           dataFim: record.get('Data Fim'),
-          area: safeArea,
         };
         const result = TurnoAtivoSchema.safeParse(rawData);
 
@@ -217,80 +216,44 @@ export const TurnosAtivosService = {
     }
   },
 
-  async getTurnosAtivosPorDepartamento(departamento: string): Promise<TurnoAtivo[] | null> {
+  async getTurnosAtivosPorPessoa(recordID: string): Promise<TurnoAtivo[]> {
     try {
-      const records = await base('Turnos Ativos')
-        .select({
-          filterByFormula: `{Área (from Nome)} = '${departamento}'`,
-        })
-        .all();
+      // Get all records (no filter)
+      const allRecords = await base('Turnos Ativos').select({ view: 'Grid view' }).all();
 
-      const results = records.map(record => {
+      const filteredRecords = allRecords.filter(record => {
+        const participantes = record.get('Participantes');
+        return Array.isArray(participantes) && participantes.includes(recordID);
+      });
+
+      // Map to your schema
+      const results = filteredRecords.map(record => {
         const rawEvento = record.get('Evento');
-        const safeEvento = Array.isArray(rawEvento) ? rawEvento[0] : rawEvento;
-        const rawNome = record.get('Nome');
-        const safeNome = Array.isArray(rawNome) ? rawNome[0] : rawNome;
-        const rawIst = record.get('IST ID (from Nome)');
-        const safeIst = Array.isArray(rawIst) ? rawIst[0] : rawIst;
-        const rawArea = record.get('Área (from Nome)');
-        const safeArea = Array.isArray(rawArea) ? rawArea[0] : rawArea;
+        const safeEvento =
+          Array.isArray(rawEvento) && rawEvento.length > 0 ? rawEvento[0] : 'Sem Evento';
+
         const rawData = {
           id: record.id,
-          idTurno: record.get('ID Turno')?.toString(),
-          nome: safeNome,
+          idTurno: record.get('ID Turno')?.toString() || 'Sem ID Turno',
+          participantes: record.get('Participantes'),
           evento: safeEvento,
-          istIds: safeIst.toString(),
           dataInicio: record.get('Data Início'),
           dataFim: record.get('Data Fim'),
-          area: safeArea,
         };
+
         const result = TurnoAtivoSchema.safeParse(rawData);
 
         if (!result.success) {
           console.error(`Validation failed for record ${record.id}:`, result.error);
-          return null;
+          return [];
         }
         return result.data;
       });
-      return results.filter((r): r is TurnoAtivo => r !== null);
-    } catch (error) {
-      console.error('Error fetching turnos ativos by departamento:', error);
-      return null;
-    }
-  },
 
-  async getTurnosAtivosPorPessoa(istId: number): Promise<TurnoAtivo[] | null> {
-    try {
-      const searchId = String(istId);
-      const records = await base('Turnos Ativos')
-        .select({
-          filterByFormula: `SEARCH('${searchId}', {IST ID (from Nome)} & "") > 0`,
-        })
-        .all();
-      const results = records.map(record => {
-        const rawEvento = record.get('Evento');
-        const safeEvento = Array.isArray(rawEvento) ? rawEvento[0] : rawEvento;
-        const rawIst = record.get('IST ID (from Nome)');
-        const safeIst = Array.isArray(rawIst) ? rawIst[0] : rawIst;
-        const rawData = {
-          id: record.id,
-          idTurno: record.get('ID Turno')?.toString(),
-          nomes: record.get('Nomes'),
-          evento: safeEvento,
-          istIds: safeIst.toString(),
-        };
-        const result = TurnoAtivoSchema.safeParse(rawData);
-
-        if (!result.success) {
-          console.error(`Validation failed for record ${record.id}:`, result.error);
-          return null;
-        }
-        return result.data;
-      });
       return results.filter((r): r is TurnoAtivo => r !== null);
     } catch (error) {
       console.error('Error fetching turnos ativos:', error);
-      return null;
+      return [];
     }
   },
 };
