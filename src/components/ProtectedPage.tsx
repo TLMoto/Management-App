@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "./UserProvider";
+import { useMembers } from "./MemberProvider";
+import { ControloPresencasService } from "../app/api/airtable/airtable";
 
 interface ProtectedPageProps {
   children: React.ReactNode;
@@ -10,6 +12,7 @@ interface ProtectedPageProps {
 
 export default function ProtectedPage({ children }: ProtectedPageProps) {
   const { user } = useUser();
+  const { members, setMembers } = useMembers();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
@@ -30,6 +33,13 @@ export default function ProtectedPage({ children }: ProtectedPageProps) {
   // If after mount there's still no user, hide content (useEffect will redirect)
   if (!user && typeof window !== "undefined" && !localStorage.getItem("user")) {
     return null;
+  }
+
+  if (members?.length === 0) {
+    ControloPresencasService.getAllUsers().then(fetchedMembers => {
+      setMembers(fetchedMembers);
+      console.log("Fetched members:", fetchedMembers);
+    });
   }
 
   return <>{children}</>;

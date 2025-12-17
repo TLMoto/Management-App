@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { ControloPresencasService } from "../api/airtable/airtable";
 
 export default function Login() {
-  const { user, setUser } = useUser();
+  const { setUser } = useUser();
   const [input, setInput] = useState("");
   const router = useRouter();
 
+  /* Quando página carrega, verifica se o utilizador está guardado no localStorage */
   useEffect(() => {
     const savedId = localStorage.getItem("user");
     if (savedId) {
@@ -16,6 +17,7 @@ export default function Login() {
     }
   }, [setUser]);
 
+  /* Verifica se o utilizador existe e faz login */
   const handleLogin = async () => {
     if (input.trim() !== "") {
       const user = await ControloPresencasService.getUserByIstId(Number(input));
@@ -39,7 +41,7 @@ export default function Login() {
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => {
             if (e.key === "Enter") {
-              handleLogin(); // your function
+              handleLogin();
             }
           }}
         />

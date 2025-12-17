@@ -1,15 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect } from "react";
-
-// 1. Define the User Interface based on your requirements
-export interface User {
-  id: string;
-  nome: string;
-  funcao: string;
-  department: string;
-  istId: number; // TypeScript uses 'number' for integers
-}
+import { User } from "../app/api/airtable/airtable";
 
 // 3. Create the Context
 const UserContext = createContext<{
