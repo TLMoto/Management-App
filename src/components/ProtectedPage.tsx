@@ -35,7 +35,7 @@ export default function ProtectedPage({ children }: ProtectedPageProps) {
     return null;
   }
 
-  if (members?.length === 0) {
+  if (members.length === 0) {
     ControloPresencasService.getAllUsers().then(fetchedMembers => {
       setMembers(fetchedMembers);
     });

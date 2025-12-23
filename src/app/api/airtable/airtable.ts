@@ -2,10 +2,10 @@ import Airtable from 'airtable';
 import {
   UserSchema,
   User,
-  EventoAtivoSchema,
-  EventoAtivo,
-  TurnoAtivoSchema,
-  TurnoAtivo,
+  EventoSchema,
+  Evento,
+  TurnoSchema,
+  Turno,
 } from '../../../components/Interfaces';
 
 // Use the Airtable API key and base ID from environment variables
@@ -119,7 +119,7 @@ export const ControloPresencasService = {
 };
 
 export const EventosAtivosService = {
-  async getEventosAtivos(): Promise<EventoAtivo[] | null> {
+  async getEventosAtivos(): Promise<Evento[] | null> {
     try {
       const records = await base('Eventos Ativos')
         .select({
@@ -137,7 +137,7 @@ export const EventosAtivosService = {
           dataInicio: record.get('Data Início'),
           dataFim: record.get('Data Fim'),
         };
-        const result = EventoAtivoSchema.safeParse(rawData);
+        const result = EventoSchema.safeParse(rawData);
 
         if (!result.success) {
           console.error(`Validation failed for record ${record.id}:`, result.error);
@@ -145,7 +145,7 @@ export const EventosAtivosService = {
         }
         return result.data;
       });
-      return results.filter((r): r is EventoAtivo => r !== null);
+      return results.filter((r): r is Evento => r !== null);
     } catch (error) {
       console.error('Error fetching eventos ativos:', error);
       return null;
@@ -181,7 +181,7 @@ export const EventosAtivosService = {
 };
 
 export const TurnosAtivosService = {
-  async getTurnosAtivos(): Promise<TurnoAtivo[] | null> {
+  async getTurnosAtivos(): Promise<Turno[] | null> {
     try {
       const records = await base('Turnos Ativos')
         .select({
@@ -201,7 +201,7 @@ export const TurnosAtivosService = {
           dataInicio: record.get('Data Início'),
           dataFim: record.get('Data Fim'),
         };
-        const result = TurnoAtivoSchema.safeParse(rawData);
+        const result = TurnoSchema.safeParse(rawData);
 
         if (!result.success) {
           console.error(`Validation failed for record ${record.id}:`, result.error);
@@ -209,14 +209,14 @@ export const TurnosAtivosService = {
         }
         return result.data;
       });
-      return results.filter((r): r is TurnoAtivo => r !== null);
+      return results.filter((r): r is Turno => r !== null);
     } catch (error) {
       console.error('Error fetching turnos ativos:', error);
       return null;
     }
   },
 
-  async getTurnosAtivosPorPessoa(recordID: string): Promise<TurnoAtivo[]> {
+  async getTurnosAtivosPorPessoa(recordID: string): Promise<Turno[]> {
     try {
       // Get all records (no filter)
       const allRecords = await base('Turnos Ativos').select({ view: 'Grid view' }).all();
@@ -241,7 +241,7 @@ export const TurnosAtivosService = {
           dataFim: record.get('Data Fim'),
         };
 
-        const result = TurnoAtivoSchema.safeParse(rawData);
+        const result = TurnoSchema.safeParse(rawData);
 
         if (!result.success) {
           console.error(`Validation failed for record ${record.id}:`, result.error);
@@ -250,10 +250,83 @@ export const TurnosAtivosService = {
         return result.data;
       });
 
-      return results.filter((r): r is TurnoAtivo => r !== null);
+      return results.filter((r): r is Turno => r !== null);
     } catch (error) {
       console.error('Error fetching turnos ativos:', error);
       return [];
+    }
+  },
+};
+
+export const HistoricoTurnosService = {
+  async getHistoricoTurnos(): Promise<Turno[] | null> {
+    try {
+      const records = await base('Histórico Turnos')
+        .select({
+          view: 'Grid view',
+        })
+        .all();
+      const results = records.map(record => {
+        const rawEvento = record.get('Evento');
+        const safeEvento = Array.isArray(rawEvento) && rawEvento.length > 0 ? rawEvento[0] : [];
+        const rawParticipantes = record.get('Participantes');
+        const safeParticipantes = rawParticipantes;
+        const rawData = {
+          id: record.id,
+          idTurno: record.get('ID Turno')?.toString(),
+          participantes: safeParticipantes,
+          evento: safeEvento,
+          dataInicio: record.get('Data Início'),
+          dataFim: record.get('Data Fim'),
+        };
+        const result = TurnoSchema.safeParse(rawData);
+
+        if (!result.success) {
+          console.error(`Validation failed for record ${record.id}:`, result.error);
+          return null;
+        }
+        return result.data;
+      });
+      return results.filter((r): r is Turno => r !== null);
+    } catch (error) {
+      console.error('Error fetching turnos ativos:', error);
+      return null;
+    }
+  },
+};
+
+export const HistoricoEventosService = {
+  async getHistoricoEventos(): Promise<Evento[] | null> {
+    try {
+      const records = await base('Histórico Eventos')
+        .select({
+          view: 'Grid view',
+        })
+        .all();
+
+      console.log('Airtable Histórico Eventos records fetched:', records);
+
+      const results = records.map(record => {
+        const rawData = {
+          id: record.id,
+          nome: record.get('Nome'),
+          participantes: record.get('Participantes'),
+          dataInicio: record.get('Data Início'),
+          dataFim: record.get('Data Fim'),
+          turnos: record.get('Turnos'),
+        };
+        const result = EventoSchema.safeParse(rawData);
+
+        if (!result.success) {
+          console.error(`Validation failed for record ${record.id}:`, result.error);
+          return null;
+        }
+        return result.data;
+      });
+      return results.filter((r): r is Evento => r !== null);
+    } catch (error) {
+      console.error('Error fetching eventos ativos:', error);
+      return null;
     }
   },
 };
