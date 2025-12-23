@@ -34,7 +34,7 @@ export type User = z.infer<typeof UserSchema>;
  * Schema Zod que representa um evento ativo no sistema.
  * Contém participantes, turnos associados e intervalo temporal.
  */
-export const EventoAtivoSchema = z.object({
+export const EventoSchema = z.object({
   /** Identificador único do evento */
   id: z.string(),
 
@@ -51,13 +51,13 @@ export const EventoAtivoSchema = z.object({
   dataFim: z.string().default("Sem Data"),
 
   /** Lista de IDs dos turnos ativos associados ao evento */
-  turnosAtivos: z.array(z.string()).default(["Sem Turnos"]),
+  turnos: z.array(z.string()).default(["Sem Turnos"]),
 });
 
 /**
  * Representa um evento ativo já validado.
  */
-export type EventoAtivo = z.infer<typeof EventoAtivoSchema>;
+export type Evento = z.infer<typeof EventoSchema>;
 
 /**
  * Tipo utilizado para criar um novo evento.
@@ -78,7 +78,7 @@ export type EventoPorCriar = {
  * Schema Zod que representa um turno ativo.
  * Um turno está associado a um evento e a vários participantes.
  */
-export const TurnoAtivoSchema = z.object({
+export const TurnoSchema = z.object({
   /** Identificador único do turno ativo */
   id: z.string(),
 
@@ -101,4 +101,4 @@ export const TurnoAtivoSchema = z.object({
 /**
  * Representa um turno ativo já validado.
  */
-export type TurnoAtivo = z.infer<typeof TurnoAtivoSchema>;
+export type Turno = z.infer<typeof TurnoSchema>;

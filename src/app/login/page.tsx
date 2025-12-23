@@ -15,7 +15,7 @@ export default function Login() {
     if (savedId) {
       setInput(savedId);
     }
-  }, [setUser]);
+  }, []);
 
   /* Verifica se o utilizador existe e faz login */
   const handleLogin = async () => {

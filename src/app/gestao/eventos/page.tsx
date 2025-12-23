@@ -3,16 +3,18 @@ import ProtectedPage from "@/src/components/ProtectedPage";
 import React, { JSX, useEffect, useState } from "react";
 import { EventosAtivosService } from "../../api/airtable/airtable";
 import { useMembers } from "@/src/components/MemberProvider";
-import { EventoAtivo, EventoPorCriar } from "@/src/components/Interfaces";
+import { Evento, EventoPorCriar } from "@/src/components/Interfaces";
+import { useUser } from "@/src/components/UserProvider";
 
 export default function Eventos(): JSX.Element {
   const { members } = useMembers();
   const [nome, setNome] = useState("");
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
-  const [eventos, setEventos] = useState<EventoAtivo[]>([]);
+  const [eventos, setEventos] = useState<Evento[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { isLider } = useUser();
 
   // Filter states
   const [filterNome, setFilterNome] = useState("");
@@ -72,11 +74,12 @@ export default function Eventos(): JSX.Element {
     }
   };
 
-  // Helper function to get participant names from IDs
   const obterNomeParticipantes = (participantIds: string[]): string[] => {
-    if (!members || members.length === 0) return participantIds;
+    if (!members || members.length === 0) return Array.from(new Set(participantIds));
 
-    return participantIds.map(id => {
+    const uniqueIds = Array.from(new Set(participantIds));
+
+    return uniqueIds.map(id => {
       const member = members.find(m => m.id === id);
       return member ? member.nome : id;
     });
@@ -107,12 +110,14 @@ export default function Eventos(): JSX.Element {
             <span className={isLoading ? "animate-spin" : ""}>↻</span>
             {isLoading ? "A carregar..." : "Refrescar"}
           </button>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition"
-          >
-            + Criar Evento
-          </button>
+          {isLider && (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition"
+            >
+              + Criar Evento
+            </button>
+          )}
         </div>
 
         {/* Filters */}
@@ -217,7 +222,7 @@ export default function Eventos(): JSX.Element {
         </div>
 
         {/* Create Event Modal */}
-        {isModalOpen && (
+        {isLider && isModalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
               <div className="p-6">

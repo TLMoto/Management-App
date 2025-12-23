@@ -1,22 +1,25 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect } from "react";
-import { User } from "../app/api/airtable/airtable";
+import { User } from "../components/Interfaces";
 
 // 3. Create the Context
 const UserContext = createContext<{
   user: User | null;
   setUser: (user: User | null) => void;
   isLoading: boolean;
+  isLider: boolean;
 }>({
   user: null,
   setUser: () => {},
   isLoading: true, // Default to loading
+  isLider: false,
 });
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUserState] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true); // Track loading state
+  const isLider = user ? hasPermission(user.funcao) : false;
 
   // Load from localStorage ONCE when app loads
   useEffect(() => {
@@ -47,7 +50,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <UserContext.Provider value={{ user, setUser, isLoading }}>{children}</UserContext.Provider>
+    <UserContext.Provider value={{ user, setUser, isLoading, isLider }}>
+      {children}
+    </UserContext.Provider>
   );
 }
 
