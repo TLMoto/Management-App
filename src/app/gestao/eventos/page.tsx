@@ -1,24 +1,30 @@
 "use client";
-import ProtectedPage from "@/src/components/ProtectedPage";
-import React, { JSX, useEffect, useState } from "react";
-import { EventosAtivosService } from "../../api/airtable/airtable";
-import { useMembers } from "@/src/components/MemberProvider";
 import { Evento, EventoPorCriar } from "@/src/components/Interfaces";
+import React, { useState, useEffect } from "react";
+import { EventosService } from "../../api/airtable/airtable";
+import { useMembers } from "@/src/components/MemberProvider";
+import ProtectedPage from "@/src/components/ProtectedPage";
 import { useUser } from "@/src/components/UserProvider";
 
-export default function Eventos(): JSX.Element {
-  const { members } = useMembers();
+export default function Eventos() {
+  const [activeTab, setActiveTab] = useState<"active" | "historical">("active");
   const [nome, setNome] = useState("");
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
-  const [eventos, setEventos] = useState<Evento[]>([]);
+  const [eventosAtivos, setEventosAtivos] = useState<Evento[]>([]);
+  const [eventosHistoricos, setEventosHistoricos] = useState<Evento[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { members } = useMembers();
   const { isLider } = useUser();
 
-  // Filter states
-  const [filterNome, setFilterNome] = useState("");
-  const [filterParticipante, setFilterParticipante] = useState("");
+  // Filter states for active events
+  const [filterNomeAtivo, setFilterNomeAtivo] = useState("");
+  const [filterParticipanteAtivo, setFilterParticipanteAtivo] = useState("");
+
+  // Filter states for historical events
+  const [filterNomeHistorico, setFilterNomeHistorico] = useState("");
+  const [filterParticipanteHistorico, setFilterParticipanteHistorico] = useState("");
 
   useEffect(() => {
     loadEventos();
@@ -26,17 +32,12 @@ export default function Eventos(): JSX.Element {
 
   const loadEventos = () => {
     setIsLoading(true);
-    EventosAtivosService.getEventosAtivos()
-      .then(eventos => {
-        setEventos(eventos || []);
-      })
-      .catch(error => {
-        console.error("Erro ao carregar eventos:", error);
-        alert("Falha ao carregar eventos. Tente novamente.");
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+    // Simulate API call
+    setTimeout(async () => {
+      setEventosAtivos(await EventosService.getEventosAtivos());
+      setEventosHistoricos(await EventosService.getHistoricoEventos());
+      setIsLoading(false);
+    }, 500);
   };
 
   const criarEvento = () => {
@@ -45,55 +46,212 @@ export default function Eventos(): JSX.Element {
       dataInicio,
       dataFim,
     };
-    EventosAtivosService.criarEvento(evento)
-      .then(() => {
-        alert("Evento criado com sucesso!");
-        setNome("");
-        setDataInicio("");
-        setDataFim("");
-        setIsModalOpen(false);
-        loadEventos();
-      })
-      .catch(error => {
-        console.error("Erro ao criar evento:", error);
-        alert("Falha ao criar evento. Tente novamente.");
-      });
+    EventosService.criarEvento(evento);
+    loadEventos();
+    alert("Evento criado com sucesso!");
+    setNome("");
+    setDataInicio("");
+    setDataFim("");
+    setIsModalOpen(false);
   };
 
-  const apagarEvento = (idEvento: string) => {
+  const apagarEvento = (idEvento: string, isHistorical: boolean) => {
     if (window.confirm("Tem certeza que deseja excluir este evento?")) {
-      EventosAtivosService.apagarEvento(idEvento)
-        .then(() => {
-          alert("Evento excluído com sucesso!");
-          loadEventos();
-        })
-        .catch((error: Error) => {
-          console.error("Erro ao excluir evento:", error);
-          alert("Falha ao excluir evento. Tente novamente.");
-        });
+      if (isHistorical) {
+        setEventosHistoricos(eventosHistoricos.filter(e => e.id !== idEvento));
+      } else {
+        setEventosAtivos(eventosAtivos.filter(e => e.id !== idEvento));
+      }
+      alert("Evento excluído com sucesso!");
     }
   };
 
   const obterNomeParticipantes = (participantIds: string[]): string[] => {
-    if (!members || members.length === 0) return Array.from(new Set(participantIds));
-
     const uniqueIds = Array.from(new Set(participantIds));
-
     return uniqueIds.map(id => {
       const member = members.find(m => m.id === id);
       return member ? member.nome : id;
     });
   };
 
-  const filteredEventos = eventos.filter(evento => {
+  const filteredEventosAtivos = eventosAtivos.filter(evento => {
     const matchesNome =
-      filterNome === "" || evento.nome.toLowerCase().includes(filterNome.toLowerCase());
+      filterNomeAtivo === "" || evento.nome.toLowerCase().includes(filterNomeAtivo.toLowerCase());
     const participantNames = obterNomeParticipantes(evento.participantes);
     const matchesParticipante =
-      filterParticipante === "" ||
-      participantNames.some(name => name.toLowerCase().includes(filterParticipante.toLowerCase()));
+      filterParticipanteAtivo === "" ||
+      participantNames.some(name =>
+        name.toLowerCase().includes(filterParticipanteAtivo.toLowerCase())
+      );
     return matchesNome && matchesParticipante;
   });
+
+  const filteredEventosHistoricos = eventosHistoricos.filter(evento => {
+    const matchesNome =
+      filterNomeHistorico === "" ||
+      evento.nome.toLowerCase().includes(filterNomeHistorico.toLowerCase());
+    const participantNames = obterNomeParticipantes(evento.participantes);
+    const matchesParticipante =
+      filterParticipanteHistorico === "" ||
+      participantNames.some(name =>
+        name.toLowerCase().includes(filterParticipanteHistorico.toLowerCase())
+      );
+    return matchesNome && matchesParticipante;
+  });
+
+  const EventsTable = ({ eventos, isHistorical }: { eventos: Evento[]; isHistorical: boolean }) => (
+    <>
+      {/* Desktop Table View */}
+      <div className="hidden md:block bg-white rounded-lg shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full table-fixed">
+            <colgroup>
+              <col className="w-1/5" />
+              <col className="w-2/5" />
+              <col className="w-1/6" />
+              <col className="w-1/6" />
+              {isLider && <col className="w-20" />}
+            </colgroup>
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Nome
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Participantes
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Data Início
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Data Fim
+                </th>
+                {isLider && (
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Ações
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {eventos.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                    Nenhum evento encontrado
+                  </td>
+                </tr>
+              ) : (
+                eventos.map(evento => (
+                  <tr key={evento.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                      <div className="break-words">{evento.nome}</div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-700">
+                      <div className="break-words leading-relaxed">
+                        {obterNomeParticipantes(evento.participantes).join(", ")}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-700">
+                      <div className="whitespace-nowrap">
+                        {new Date(evento.dataInicio).toLocaleDateString("pt-PT")}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-700">
+                      <div className="whitespace-nowrap">
+                        {new Date(evento.dataFim).toLocaleDateString("pt-PT")}
+                      </div>
+                    </td>
+                    {isLider && (
+                      <td className="px-6 py-4 text-right text-sm font-medium">
+                        <button
+                          onClick={() => apagarEvento(evento.id, isHistorical)}
+                          className="text-red-600 hover:text-red-900 transition inline-flex justify-center"
+                          title="Excluir evento"
+                        >
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-4">
+        {eventos.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm p-6 text-center text-gray-500">
+            Nenhum evento encontrado
+          </div>
+        ) : (
+          eventos.map(evento => (
+            <div key={evento.id} className="bg-white rounded-lg shadow-sm p-4 space-y-3">
+              <div className="flex justify-between items-start gap-2">
+                <h3 className="text-base font-semibold text-gray-900 break-words flex-1">
+                  {evento.nome}
+                </h3>
+                {isLider && (
+                  <button
+                    onClick={() => apagarEvento(evento.id, isHistorical)}
+                    className="text-red-600 hover:text-red-900 transition flex-shrink-0"
+                    title="Excluir evento"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-2 text-sm">
+                <div>
+                  <span className="font-medium text-gray-500">Participantes:</span>
+                  <p className="text-gray-700 mt-1 break-words">
+                    {obterNomeParticipantes(evento.participantes).join(", ")}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="font-medium text-gray-500 block">Data Início:</span>
+                    <span className="text-gray-700">
+                      {new Date(evento.dataInicio).toLocaleDateString("pt-PT")}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-500 block">Data Fim:</span>
+                    <span className="text-gray-700">
+                      {new Date(evento.dataFim).toLocaleDateString("pt-PT")}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </>
+  );
 
   return (
     <ProtectedPage>
@@ -101,6 +259,7 @@ export default function Eventos(): JSX.Element {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl text-white font-semibold">Gestão de Eventos</h1>
         </div>
+
         <div className="flex justify-between items-center mb-8">
           <button
             onClick={() => loadEventos()}
@@ -120,106 +279,111 @@ export default function Eventos(): JSX.Element {
           )}
         </div>
 
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h2 className="text-lg text-black font-medium mb-4">Filtros</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Nome do Evento</label>
-              <input
-                type="text"
-                value={filterNome}
-                onChange={e => setFilterNome(e.target.value)}
-                placeholder="Filtrar por nome..."
-                className="w-full px-4 py-2 border text-gray-500 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Pessoa</label>
-              <input
-                type="text"
-                value={filterParticipante}
-                onChange={e => setFilterParticipante(e.target.value)}
-                placeholder="Filtrar por participante..."
-                className="w-full px-4 py-2 border text-gray-500 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
+        {/* Tabs */}
+        <div className="mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setActiveTab("active")}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition ${
+                  activeTab === "active"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300"
+                }`}
+              >
+                Eventos Ativos
+                <span className="ml-2 bg-blue-100 text-blue-600 py-0.5 px-2.5 rounded-full text-xs font-medium">
+                  {eventosAtivos.length}
+                </span>
+              </button>
+              <button
+                onClick={() => setActiveTab("historical")}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition ${
+                  activeTab === "historical"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300"
+                }`}
+              >
+                Eventos Históricos
+                <span className="ml-2 bg-gray-100 text-gray-600 py-0.5 px-2.5 rounded-full text-xs font-medium">
+                  {eventosHistoricos.length}
+                </span>
+              </button>
+            </nav>
           </div>
         </div>
 
-        {/* Events List */}
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nome
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Participantes
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Data Início
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Data Fim
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Ações
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredEventos.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                      Nenhum evento encontrado
-                    </td>
-                  </tr>
-                ) : (
-                  filteredEventos.map(evento => (
-                    <tr key={evento.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {evento.nome}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-700">
-                        {obterNomeParticipantes(evento.participantes).join(", ")}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        {new Date(evento.dataInicio).toLocaleDateString("pt-PT")}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        {new Date(evento.dataFim).toLocaleDateString("pt-PT")}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => apagarEvento(evento.id)}
-                          className="text-red-600 hover:text-red-900 transition"
-                          title="Excluir evento"
-                        >
-                          <svg
-                            className="w-5 h-5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M6 18L18 6M6 6l12 12"
-                            />
-                          </svg>
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {/* Active Events Tab */}
+        {activeTab === "active" && (
+          <>
+            {/* Filters for Active Events */}
+            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+              <h2 className="text-lg text-black font-medium mb-4">Filtros</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nome do Evento
+                  </label>
+                  <input
+                    type="text"
+                    value={filterNomeAtivo}
+                    onChange={e => setFilterNomeAtivo(e.target.value)}
+                    placeholder="Filtrar por nome..."
+                    className="w-full px-4 py-2 border text-gray-500 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Pessoa</label>
+                  <input
+                    type="text"
+                    value={filterParticipanteAtivo}
+                    onChange={e => setFilterParticipanteAtivo(e.target.value)}
+                    placeholder="Filtrar por participante..."
+                    className="w-full px-4 py-2 border text-gray-500 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <EventsTable eventos={filteredEventosAtivos} isHistorical={false} />
+          </>
+        )}
+
+        {/* Historical Events Tab */}
+        {activeTab === "historical" && (
+          <>
+            {/* Filters for Historical Events */}
+            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+              <h2 className="text-lg text-black font-medium mb-4">Filtros</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nome do Evento
+                  </label>
+                  <input
+                    type="text"
+                    value={filterNomeHistorico}
+                    onChange={e => setFilterNomeHistorico(e.target.value)}
+                    placeholder="Filtrar por nome..."
+                    className="w-full px-4 py-2 border text-gray-500 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Pessoa</label>
+                  <input
+                    type="text"
+                    value={filterParticipanteHistorico}
+                    onChange={e => setFilterParticipanteHistorico(e.target.value)}
+                    placeholder="Filtrar por participante..."
+                    className="w-full px-4 py-2 border text-gray-500 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <EventsTable eventos={filteredEventosHistoricos} isHistorical={true} />
+          </>
+        )}
 
         {/* Create Event Modal */}
         {isLider && isModalOpen && (

@@ -1,7 +1,7 @@
 "use client";
 import ProtectedPage from "../components/ProtectedPage";
 import { useEffect, useState } from "react";
-import { EventosAtivosService, TurnosAtivosService } from "./api/airtable/airtable";
+import { EventosService, TurnosService } from "./api/airtable/airtable";
 import { useMembers } from "../components/MemberProvider";
 import Link from "next/link";
 import { useUser } from "../components/UserProvider";
@@ -21,7 +21,7 @@ export default function Home() {
 
     const loadDashboardData = () => {
       setIsLoading(true);
-      EventosAtivosService.getEventosAtivos()
+      EventosService.getEventosAtivos()
         .then(eventos => {
           setEventos(eventos || []);
         })
@@ -35,7 +35,7 @@ export default function Home() {
             setIsLoading(false);
             return;
           }
-          TurnosAtivosService.getTurnosAtivosPorPessoa(currentUser.id)
+          TurnosService.getTurnosAtivosPorPessoa(currentUser.id)
             .then(turnos => {
               setMeusTurnos(turnos);
             })
@@ -62,8 +62,11 @@ export default function Home() {
     : [];
 
   const obterNomeParticipantes = (participantIds: string[]): string[] => {
-    if (!members || members.length === 0) return participantIds;
-    return participantIds.map(id => {
+    if (!members || members.length === 0) return Array.from(new Set(participantIds));
+
+    const uniqueIds = Array.from(new Set(participantIds));
+
+    return uniqueIds.map(id => {
       const member = members.find(m => m.id === id);
       return member ? member.nome : id;
     });

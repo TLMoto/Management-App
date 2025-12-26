@@ -42,7 +42,7 @@ export const EventoSchema = z.object({
   nome: z.string().default("Sem Nome"),
 
   /** Lista de IDs dos participantes associados ao evento */
-  participantes: z.array(z.string()).default(["Sem Pessoas"]),
+  participantes: z.array(z.string()).default([]),
 
   /** Data e hora de início do evento (ISO 8601) */
   dataInicio: z.string().default("Sem Data"),
@@ -51,7 +51,7 @@ export const EventoSchema = z.object({
   dataFim: z.string().default("Sem Data"),
 
   /** Lista de IDs dos turnos ativos associados ao evento */
-  turnos: z.array(z.string()).default(["Sem Turnos"]),
+  turnos: z.array(z.string()).default([]),
 });
 
 /**
@@ -86,7 +86,7 @@ export const TurnoSchema = z.object({
   idTurno: z.string().default("Sem ID Turno"),
 
   /** Lista de IDs dos participantes do turno */
-  participantes: z.array(z.string()).default(["Sem Participantes"]),
+  participantes: z.array(z.string()).default([]),
 
   /** ID do evento associado ao turno */
   evento: z.string().default("Sem Evento"),

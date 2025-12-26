@@ -118,12 +118,80 @@ export const ControloPresencasService = {
   },
 };
 
-export const EventosAtivosService = {
-  async getEventosAtivos(): Promise<Evento[] | null> {
+export const EventosService = {
+  async getEventos(): Promise<Evento[] | null> {
     try {
-      const records = await base('Eventos Ativos')
+      const records = await base('Eventos')
         .select({
-          view: 'Grid view',
+          view: 'Eventos',
+        })
+        .all();
+
+      console.log('Airtable Eventos records fetched:', records);
+
+      const results = records.map(record => {
+        const rawData = {
+          id: record.id,
+          nome: record.get('Nome'),
+          participantes: record.get('Participantes'),
+          dataInicio: record.get('Data Início'),
+          dataFim: record.get('Data Fim'),
+          turnos: record.get('Turnos'),
+        };
+        const result = EventoSchema.safeParse(rawData);
+
+        if (!result.success) {
+          console.error(`Validation failed for record ${record.id}:`, result.error);
+          throw new Error(`Validation failed for record ${record.id}:`, result.error);
+        }
+        return result.data;
+      });
+      return results.filter((r): r is Evento => r !== null);
+    } catch (error) {
+      console.error('Error fetching eventos:', error);
+      return [];
+    }
+  },
+
+  async getHistoricoEventos(): Promise<Evento[]> {
+    try {
+      const records = await base('Eventos')
+        .select({
+          view: 'Histórico Eventos',
+        })
+        .all();
+
+      console.log('Airtable Histórico Eventos records fetched:', records);
+
+      const results = records.map(record => {
+        const rawData = {
+          id: record.id,
+          nome: record.get('Nome'),
+          participantes: record.get('Participantes'),
+          dataInicio: record.get('Data Início'),
+          dataFim: record.get('Data Fim'),
+          turnos: record.get('Turnos'),
+        };
+        const result = EventoSchema.safeParse(rawData);
+
+        if (!result.success) {
+          console.error(`Validation failed for record ${record.id}:`, result.error);
+          throw new Error(`Validation failed for record ${record.id}: ${result.error}`);
+        }
+        return result.data;
+      });
+      return results.filter((r): r is Evento => r !== null);
+    } catch (error) {
+      console.error('Error fetching historico eventos:', error);
+      return [];
+    }
+  },
+
+  async getEventosAtivos(): Promise<Evento[]> {
+    try {
+      const records = await base('Eventos')
+        .select({
+          view: 'Eventos Ativos',
         })
         .all();
 
@@ -141,20 +209,20 @@ export const EventosAtivosService = {
 
         if (!result.success) {
           console.error(`Validation failed for record ${record.id}:`, result.error);
-          return null;
+          return [];
         }
         return result.data;
       });
       return results.filter((r): r is Evento => r !== null);
     } catch (error) {
       console.error('Error fetching eventos ativos:', error);
-      return null;
+      return [];
     }
   },
 
   async criarEvento(evento: { nome: string; dataInicio: string; dataFim: string }): Promise<void> {
     try {
-      await base('Eventos Ativos').create([
+      await base('Eventos').create([
         {
           fields: {
             // eslint-disable-next-line prettier/prettier
@@ -172,7 +240,7 @@ export const EventosAtivosService = {
 
   async apagarEvento(eventoId: string): Promise<void> {
     try {
-      await base('Eventos Ativos').destroy([eventoId]);
+      await base('Eventos').destroy([eventoId]);
     } catch (error) {
       console.error('Error deleting evento:', error);
       throw error;
@@ -180,12 +248,12 @@ export const EventosAtivosService = {
   },
 };
 
-export const TurnosAtivosService = {
-  async getTurnosAtivos(): Promise<Turno[] | null> {
+export const TurnosService = {
+  async getTurnosAtivos(): Promise<Turno[]> {
     try {
-      const records = await base('Turnos Ativos')
+      const records = await base('Turnos')
         .select({
-          view: 'Grid view',
+          view: 'Turnos Ativos',
         })
         .all();
       const results = records.map(record => {
@@ -205,21 +273,56 @@ export const TurnosAtivosService = {
 
         if (!result.success) {
           console.error(`Validation failed for record ${record.id}:`, result.error);
-          return null;
+          throw new Error(`Validation failed for record ${record.id}: ${result.error}`);
         }
         return result.data;
       });
       return results.filter((r): r is Turno => r !== null);
     } catch (error) {
       console.error('Error fetching turnos ativos:', error);
-      return null;
+      return [];
+    }
+  },
+
+  async getHistoricoTurnos(): Promise<Turno[]> {
+    try {
+      const records = await base('Turnos')
+        .select({
+          view: 'Histórico Turnos',
+        })
+        .all();
+      const results = records.map(record => {
+        const rawEvento = record.get('Evento');
+        const safeEvento = Array.isArray(rawEvento) && rawEvento.length > 0 ? rawEvento[0] : [];
+        const rawParticipantes = record.get('Participantes');
+        const safeParticipantes = rawParticipantes;
+        const rawData = {
+          id: record.id,
+          idTurno: record.get('ID Turno')?.toString(),
+          participantes: safeParticipantes,
+          evento: safeEvento,
+          dataInicio: record.get('Data Início'),
+          dataFim: record.get('Data Fim'),
+        };
+        const result = TurnoSchema.safeParse(rawData);
+
+        if (!result.success) {
+          console.error(`Validation failed for record ${record.id}:`, result.error);
+          throw new Error(`Validation failed for record ${record.id}: ${result.error}`);
+        }
+        return result.data;
+      });
+      return results.filter((r): r is Turno => r !== null);
+    } catch (error) {
+      console.error('Error fetching turnos ativos:', error);
+      return [];
     }
   },
 
   async getTurnosAtivosPorPessoa(recordID: string): Promise<Turno[]> {
     try {
       // Get all records (no filter)
-      const allRecords = await base('Turnos Ativos').select({ view: 'Grid view' }).all();
+      const allRecords = await base('Turnos').select({ view: 'Turnos Ativos' }).all();
 
       const filteredRecords = allRecords.filter(record => {
         const participantes = record.get('Participantes');
@@ -254,79 +357,6 @@ export const TurnosAtivosService = {
     } catch (error) {
       console.error('Error fetching turnos ativos:', error);
       return [];
-    }
-  },
-};
-
-export const HistoricoTurnosService = {
-  async getHistoricoTurnos(): Promise<Turno[] | null> {
-    try {
-      const records = await base('Histórico Turnos')
-        .select({
-          view: 'Grid view',
-        })
-        .all();
-      const results = records.map(record => {
-        const rawEvento = record.get('Evento');
-        const safeEvento = Array.isArray(rawEvento) && rawEvento.length > 0 ? rawEvento[0] : [];
-        const rawParticipantes = record.get('Participantes');
-        const safeParticipantes = rawParticipantes;
-        const rawData = {
-          id: record.id,
-          idTurno: record.get('ID Turno')?.toString(),
-          participantes: safeParticipantes,
-          evento: safeEvento,
-          dataInicio: record.get('Data Início'),
-          dataFim: record.get('Data Fim'),
-        };
-        const result = TurnoSchema.safeParse(rawData);
-
-        if (!result.success) {
-          console.error(`Validation failed for record ${record.id}:`, result.error);
-          return null;
-        }
-        return result.data;
-      });
-      return results.filter((r): r is Turno => r !== null);
-    } catch (error) {
-      console.error('Error fetching turnos ativos:', error);
-      return null;
-    }
-  },
-};
-
-export const HistoricoEventosService = {
-  async getHistoricoEventos(): Promise<Evento[] | null> {
-    try {
-      const records = await base('Histórico Eventos')
-        .select({
-          view: 'Grid view',
-        })
-        .all();
-
-      console.log('Airtable Histórico Eventos records fetched:', records);
-
-      const results = records.map(record => {
-        const rawData = {
-          id: record.id,
-          nome: record.get('Nome'),
-          participantes: record.get('Participantes'),
-          dataInicio: record.get('Data Início'),
-          dataFim: record.get('Data Fim'),
-          turnos: record.get('Turnos'),
-        };
-        const result = EventoSchema.safeParse(rawData);
-
-        if (!result.success) {
-          console.error(`Validation failed for record ${record.id}:`, result.error);
-          return null;
-        }
-        return result.data;
-      });
-      return results.filter((r): r is Evento => r !== null);
-    } catch (error) {
-      console.error('Error fetching eventos ativos:', error);
-      return null;
     }
   },
 };
