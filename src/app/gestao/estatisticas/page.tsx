@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar, Users, Clock, TrendingUp, Search, PieChart, BarChart3 } from "lucide-react";
 import { useMembers, useMembersByAreaArray } from "@/src/components/MemberProvider";
-import { HistoricoEventosService, HistoricoTurnosService } from "../../api/airtable/airtable";
+import { EventosService, TurnosService } from "../../api/airtable/airtable";
 import { Evento, Turno } from "@/src/components/Interfaces";
 import ProtectedPage from "@/src/components/ProtectedPage";
 import {
@@ -49,7 +49,7 @@ const StatisticsPage = () => {
   }, []);
 
   const loadEventos = () => {
-    HistoricoEventosService.getHistoricoEventos()
+    EventosService.getEventos()
       .then(eventos => {
         setEventos(eventos || []);
       })
@@ -60,7 +60,7 @@ const StatisticsPage = () => {
   };
 
   const loadTurnos = () => {
-    HistoricoTurnosService.getHistoricoTurnos()
+    TurnosService.getHistoricoTurnos()
       .then(turnos => {
         setTurnos(turnos || []);
       })
@@ -432,7 +432,7 @@ const StatisticsPage = () => {
                 <select
                   value={dateFilter}
                   onChange={e => setDateFilter(e.target.value)}
-                  className="w-full border rounded-lg text-black px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full border outline-black rounded-lg text-gray-400 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="all">Todos os períodos</option>
                   <option value="7">Últimos 7 dias</option>
@@ -445,20 +445,26 @@ const StatisticsPage = () => {
 
                 {dateFilter === "custom" && (
                   <div className="mt-3 space-y-2">
-                    <input
-                      type="date"
-                      value={customStartDate}
-                      onChange={e => setCustomStartDate(e.target.value)}
-                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                      placeholder="Data inicial"
-                    />
-                    <input
-                      type="date"
-                      value={customEndDate}
-                      onChange={e => setCustomEndDate(e.target.value)}
-                      className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                      placeholder="Data final"
-                    />
+                    <div className="mt-3 flex justify-between">
+                      <label className="block text-sm text-gray-600 mt-2">Data Início:</label>
+                      <input
+                        type="date"
+                        value={customStartDate}
+                        onChange={e => setCustomStartDate(e.target.value)}
+                        className="w-[70%] border bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 text-gray-700"
+                        placeholder="Data inicial"
+                      />
+                    </div>
+                    <div className="mt-3 flex justify-between">
+                      <label className="block text-sm text-gray-600 mt-2">Data Fim:</label>
+                      <input
+                        type="date"
+                        value={customEndDate}
+                        onChange={e => setCustomEndDate(e.target.value)}
+                        className="w-[70%] border bg-gray-50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 text-gray-700"
+                        placeholder="Data final"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -614,7 +620,7 @@ const StatisticsPage = () => {
                 </ResponsiveContainer>
               </div>
 
-              <div className="mt-6 overflow-x-auto">
+              <div className="mt-10 overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
