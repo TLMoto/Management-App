@@ -48,6 +48,7 @@ export default function Disponibilidade() {
     // Convert CrabFit availability format to local TimeSlot format
     const loadAvailabilityFromCrabFit = (crabAvailability: string[]) => {
       const timeSlots: TimeSlot[] = [];
+      const processedSlots = new Set<string>(); // Para evitar duplicados
 
       crabAvailability.forEach(slot => {
         // Format: "HHMM-D" (e.g., "0800-1" for Monday 08:00)
@@ -56,7 +57,16 @@ export default function Disponibilidade() {
           const hour = parseInt(match[1]);
           const minute = parseInt(match[2]);
           const day = parseInt(match[3]);
-          timeSlots.push({ day, hour, minute });
+          
+          // Converter slots de 15 minutos do CrabFit para slots de 30 minutos nossos
+          // Só processar slots que começam em :00 ou :30 (ignorar :15 e :45)
+          if (minute % 30 === 0) {
+            const slotKey = `${day}-${hour}-${minute}`;
+            if (!processedSlots.has(slotKey)) {
+              timeSlots.push({ day, hour, minute });
+              processedSlots.add(slotKey);
+            }
+          }
         }
       });
 
@@ -103,10 +113,30 @@ export default function Disponibilidade() {
     const personSlots = availability[selectedPerson] || [];
 
     // Convert local slots to CrabFit format
-    const crabAvailability = personSlots.map(slot => {
+    // Como o CrabFit usa slots de 15 minutos e nós usamos 30 minutos,
+    // cada slot nosso deve gerar 2 slots no CrabFit
+    const crabAvailability: string[] = [];
+    
+    personSlots.forEach(slot => {
       const hourStr = slot.hour.toString().padStart(2, "0");
       const minuteStr = slot.minute.toString().padStart(2, "0");
-      return `${hourStr}${minuteStr}-${slot.day}`;
+      
+      // Primeiro slot de 15 minutos (ex: 08:00)
+      crabAvailability.push(`${hourStr}${minuteStr}-${slot.day}`);
+      
+      // Segundo slot de 15 minutos (ex: 08:15)
+      const secondSlotMinute = slot.minute + 15;
+      let secondSlotHour = slot.hour;
+      
+      // Se os minutos passarem de 59, ajustar a hora
+      if (secondSlotMinute >= 60) {
+        secondSlotHour = (slot.hour + 1) % 24;
+      }
+      
+      const secondHourStr = secondSlotHour.toString().padStart(2, "0");
+      const secondMinuteStr = (secondSlotMinute % 60).toString().padStart(2, "0");
+      
+      crabAvailability.push(`${secondHourStr}${secondMinuteStr}-${slot.day}`);
     });
 
     try {

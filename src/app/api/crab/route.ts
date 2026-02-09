@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(body),
     });
 
-    console.log('📥 Proxy: Resposta da API:', response.status, response.statusText);
+    //console.log('📥 Proxy: Resposta da API:', response.status, response.statusText);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -81,7 +81,37 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(result);
     }
 
-    // Operação: Buscar evento (código existente)
+    if(action === 'getPeople' && eventId) {
+      const response = await fetch (`${API_BASE_URL}/event/${eventId}/people`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+
+        let errorMessage = 'Erro desconhecido da API';
+
+        switch (response.status) {
+          case 404:
+            errorMessage = 'Event not found';
+            break;
+          case 429:
+            errorMessage = 'Too many requests';
+            break;
+          default:
+            errorMessage = `Erro da API: ${errorText}`;
+        }
+
+        return NextResponse.json({ error: errorMessage }, { status: response.status });
+      }
+      const result = await response.json();
+      return NextResponse.json(result);
+    }
+
+    // Operação: Buscar evento
     if (eventId && !action) {
       const response = await fetch(`${API_BASE_URL}/event/${eventId}`, {
         method: 'GET',
@@ -99,7 +129,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(result);
     }
 
-    // Parâmetros inválidos
     return NextResponse.json(
       {
         error:
