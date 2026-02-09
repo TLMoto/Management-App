@@ -1,628 +1,380 @@
 "use client";
 
+import React, { useState, useEffect, useMemo } from 'react';
+import type { JSX } from 'react';
+import { useUser } from "@/src/components/UserProvider";
 import ProtectedPage from "@/src/components/ProtectedPage";
-import Link from "next/link";
-import { useState, useCallback, useRef, useEffect } from "react";
-import { ControloPresencasService } from "@/src/app/api/airtable/airtable";
+import { 
+  EventosService, 
+  TurnosService, 
+  ControloPresencasService,
+  TurnoAirtable 
+} from "../api/airtable/airtable";
+import { getPeopleAvailability, PeopleAvailabilityResponse } from "../api/crab/api";
+import { Evento, User } from "@/src/components/Interfaces"; 
 
-interface TimeSlot {
+const DIAS_SEMANA = [
+  { value: 0, label: "Domingo" },
+  { value: 1, label: "Segunda-feira" },
+  { value: 2, label: "Terça-feira" },
+  { value: 3, label: "Quarta-feira" },
+  { value: 4, label: "Quinta-feira" },
+  { value: 5, label: "Sexta-feira" },
+  { value: 6, label: "Sábado" },
+];
+
+const MESES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
+
+interface TurnoLocal extends TurnoAirtable {
+  diaSemana?: number; 
+  dataCompleta?: string;
+}
+
+interface DiaCalendario {
+  date: Date;
   day: number;
-  hour: number;
-  minute: number;
+  isCurrentMonth: boolean;
+  isToday: boolean;
+  turnos: TurnoLocal[];
 }
 
-interface Person {
-  id: string;
-  name: string;
-  area: string;
-}
+// --- HELPERS ---
+const getWeekDayFromDate = (dateStr: string): number => {
+  if (!dateStr) return 0;
+  const [day, month, year] = dateStr.split('/').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getDay();
+};
 
-interface AvailabilityData {
-  [personId: string]: TimeSlot[];
-}
+const isTurnoFuturo = (turno: TurnoLocal): boolean => {
+  if (!turno.dataCompleta) return false;
+  const [day, month, year] = turno.dataCompleta.split('/').map(Number);
+  const turnoDate = new Date(year, month - 1, day);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return turnoDate >= today;
+};
 
-// Users will be loaded from Airtable
-// const PEOPLE removed — data fetched via UserService.getAllUsers()
+const parseDateString = (dateStr: string): Date => {
+  const [day, month, year] = dateStr.split('/').map(Number);
+  return new Date(year, month - 1, day);
+};
 
-const DAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
-const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => {
-  const totalMinutes = i * 30;
-  const hour = Math.floor(totalMinutes / 60);
-  const minute = totalMinutes % 60;
-  return { hour, minute };
-});
+const isSameDay = (date1: Date, date2: Date): boolean => {
+  return date1.getFullYear() === date2.getFullYear() &&
+         date1.getMonth() === date2.getMonth() &&
+         date1.getDate() === date2.getDate();
+};
 
-/**
- * The TLCrab class is the initial page of the application.
- *
- * @class TLCrab
- */
-export default function TLCrab() {
-  const [selectedPerson, setSelectedPerson] = useState<string>("");
-  const [selectedArea, setSelectedArea] = useState<string>("");
-  const [availability, setAvailability] = useState<AvailabilityData>({});
-  const [dragStart, setDragStart] = useState<{ day: number; hour: number; minute: number } | null>(
-    null
-  );
-
-  const [searchTerm, setSearchTerm] = useState<string>("");
-  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
-  const [users, setUsers] = useState<Person[]>([]);
-  const [filteredPeople, setFilteredPeople] = useState<Person[]>([]);
-  const [departments, setDepartments] = useState<string[]>([]);
-
-  const isMouseDown = useRef(false);
-  const [isSelectingMode, setIsSelectingMode] = useState<boolean | null>(null);
-  const visitedSlotsRef = useRef<string[]>([]); // order of slots changed during current drag
-  const originalStateRef = useRef<Map<string, boolean>>(new Map());
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Carregar dados do localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem("tlcrab-availability");
-    if (saved) {
-      try {
-        setAvailability(JSON.parse(saved));
-      } catch (err) {
-        console.error("Erro ao carregar dados:", err);
-      }
-    }
-  }, []);
-
-  // Salvar dados no localStorage
-  useEffect(() => {
-    localStorage.setItem("tlcrab-availability", JSON.stringify(availability));
-  }, [availability]);
-
-  // Filtrar pessoas baseado no termo de pesquisa (case-insensitive + diacritic-insensitive)
-  useEffect(() => {
-    // Normalizes and removes diacritics, then lowercases for comparison
-    const normalize = (s: string) =>
-      s
-        .normalize("NFD")
-        .replace(/\p{Diacritic}/gu, "")
-        .toLocaleLowerCase();
-
-    const q = normalize(searchTerm.trim());
-    let filtered = users;
-
-    // If there is a search term, match against name OR area (diacritic- & case-insensitive)
-    if (q !== "") {
-      filtered = filtered.filter(person => {
-        const name = normalize(person.name || "");
-        const area = normalize(person.area || "");
-        return name.includes(q) || area.includes(q);
-      });
-    }
-
-    // Filter by area (diacritic- & case-insensitive exact match)
-    if (selectedArea !== "") {
-      const areaFilter = normalize(selectedArea);
-      filtered = filtered.filter(person => normalize(person.area || "") === areaFilter);
-    }
-
-    setFilteredPeople(filtered);
-  }, [searchTerm, selectedArea, users]);
-
-  // Load users from Airtable
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const all = await ControloPresencasService.getAllUsers();
-        if (!mounted) return;
-        // map Airtable User -> Person shape used in this page
-        const mapped: Person[] = all.map(u => ({ id: u.id, name: u.nome, area: u.department }));
-        setUsers(mapped);
-        setFilteredPeople(mapped);
-      } catch (err) {
-        console.error("Failed to load users:", err);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
-
-    // Load departments from Airtable
-    useEffect(() => {
-      let mounted = true;
-      (async () => {
-        try {
-          const deps = await ControloPresencasService.getAllDepartments();
-          if (mounted) setDepartments(deps);
-        } catch (err) {
-          console.error("Failed to load departments:", err);
-        }
-      })();
-      return () => {
-        mounted = false;
-      };
-    }, []);
-
-  // Fechar dropdown quando clicar fora
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  const handlePersonSelect = (person: Person) => {
-    setSelectedPerson(person.id);
-    setSearchTerm(`${person.name} (${person.area})`);
-    setIsDropdownOpen(false);
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchTerm(value);
-    setIsDropdownOpen(true);
-
-    // Se o campo estiver vazio, limpar a seleção
-    if (value.trim() === "") {
-      setSelectedPerson("");
-    }
-  };
-
-  const handleInputFocus = () => {
-    setIsDropdownOpen(true);
-  };
-
-  const clearSelection = () => {
-    setSelectedPerson("");
-    setSearchTerm("");
-    setIsDropdownOpen(false);
-    inputRef.current?.focus();
-  };
-
-  const toggleTimeSlot = useCallback(
-    (day: number, hour: number, minute: number) => {
-      if (!selectedPerson) return;
-
-      setAvailability(prev => {
-        const personSlots = prev[selectedPerson] || [];
-        const existingIndex = personSlots.findIndex(
-          slot => slot.day === day && slot.hour === hour && slot.minute === minute
-        );
-
-        if (existingIndex !== -1) {
-          return {
-            ...prev,
-            [selectedPerson]: personSlots.filter(
-              slot => !(slot.day === day && slot.hour === hour && slot.minute === minute)
-            ),
-          };
-        } else {
-          return {
-            ...prev,
-            [selectedPerson]: [...personSlots, { day, hour, minute }],
-          };
-        }
-      });
-    },
-    [selectedPerson]
-  );
-
-  const isSlotSelected = useCallback(
-    (day: number, hour: number, minute: number) => {
-      if (!selectedPerson) return false;
-      const personSlots = availability[selectedPerson] || [];
-      return personSlots.some(
-        slot => slot.day === day && slot.hour === hour && slot.minute === minute
-      );
-    },
-    [availability, selectedPerson]
-  );
-
-  const handleMouseDown = useCallback(
-    (day: number, hour: number, minute: number) => {
-      if (!selectedPerson) return;
-
-      const currentlySelected = isSlotSelected(day, hour, minute);
-      const selecting = !currentlySelected; // true = add, false = remove
-      setIsSelectingMode(selecting);
-      isMouseDown.current = true;
-      setDragStart({ day, hour, minute });
-
-      // initialize visited/originals for this drag
-      visitedSlotsRef.current = [];
-      originalStateRef.current = new Map();
-
-      const key = `${day}-${hour}-${minute}`;
-      originalStateRef.current.set(key, currentlySelected);
-      visitedSlotsRef.current.push(key);
-
-      // Apply the intended state (set or unset) instead of toggling blindly
-      setAvailability(prev => {
-        const personSlots = prev[selectedPerson] || [];
-        const exists = personSlots.some(s => s.day === day && s.hour === hour && s.minute === minute);
-        if (selecting) {
-          if (exists) return prev;
-          return { ...prev, [selectedPerson]: [...personSlots, { day, hour, minute }] };
-        } else {
-          if (!exists) return prev;
-          return {
-            ...prev,
-            [selectedPerson]: personSlots.filter(s => !(s.day === day && s.hour === hour && s.minute === minute)),
-          };
-        }
-      });
-    },
-    [isSlotSelected, selectedPerson, toggleTimeSlot]
-  );
-
-  const handleMouseUp = useCallback(() => {
-    isMouseDown.current = false;
-    setDragStart(null);
-    setIsSelectingMode(null);
-    // clear visited/originals
-    visitedSlotsRef.current = [];
-    originalStateRef.current.clear();
-  }, []);
-
-  const handleMouseEnter = useCallback(
-    (day: number, hour: number, minute: number) => {
-      if (!isMouseDown.current || !selectedPerson || isSelectingMode === null) return;
-
-      const key = `${day}-${hour}-${minute}`;
-      const visited = visitedSlotsRef.current;
-      const originals = originalStateRef.current;
-
-      const idx = visited.indexOf(key);
-
-      if (idx === -1) {
-        // New forward slot: record original state and apply selecting action
-        const currentlySelected = isSlotSelected(day, hour, minute);
-        originals.set(key, currentlySelected);
-        visited.push(key);
-
-        setAvailability(prev => {
-          const personSlots = prev[selectedPerson] || [];
-          const exists = personSlots.some(s => s.day === day && s.hour === hour && s.minute === minute);
-          if (isSelectingMode) {
-            if (exists) return prev;
-            return { ...prev, [selectedPerson]: [...personSlots, { day, hour, minute }] };
-          } else {
-            if (!exists) return prev;
-            return {
-              ...prev,
-              [selectedPerson]: personSlots.filter(s => !(s.day === day && s.hour === hour && s.minute === minute)),
-            };
-          }
-        });
-      } else {
-        // Already visited. If user moved back (i.e., key is earlier in stack), revert later visited slots until key is the last
-        while (visited.length > 0 && visited[visited.length - 1] !== key) {
-          const lastKey = visited.pop() as string;
-          const [ld, lh, lm] = lastKey.split("-").map(n => parseInt(n, 10));
-          const original = originals.get(lastKey) ?? false;
-          // revert lastKey to original
-          setAvailability(prev => {
-            const personSlots = prev[selectedPerson] || [];
-            const exists = personSlots.some(s => s.day === ld && s.hour === lh && s.minute === lm);
-            if (original) {
-              // should be selected
-              if (exists) return prev;
-              return { ...prev, [selectedPerson]: [...personSlots, { day: ld, hour: lh, minute: lm }] };
-            } else {
-              // should be not selected
-              if (!exists) return prev;
-              return {
-                ...prev,
-                [selectedPerson]: personSlots.filter(s => !(s.day === ld && s.hour === lh && s.minute === lm)),
-              };
-            }
-          });
-          originals.delete(lastKey);
-        }
-      }
-    },
-    [selectedPerson, isSelectingMode, isSlotSelected]
-  );
-
-  // Handle touch move by hit-testing the element under the touch point
-  const handleTouchMove = useCallback(
-    (e: React.TouchEvent) => {
-      if (!isMouseDown.current) return;
-      // Prevent page scroll while dragging
-      e.preventDefault();
-
-      const touch = e.touches[0];
-      if (!touch) return;
-      const el = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement | null;
-      if (!el) return;
-
-      const slotEl = el.closest('[data-slot="true"]') as HTMLElement | null;
-      if (!slotEl) return;
-
-      const day = parseInt(slotEl.dataset.day || "", 10);
-      const hour = parseInt(slotEl.dataset.hour || "", 10);
-      const minute = parseInt(slotEl.dataset.minute || "", 10);
-
-      if (Number.isFinite(day) && Number.isFinite(hour) && Number.isFinite(minute)) {
-        handleMouseEnter(day, hour, minute);
-      }
-    },
-    [handleMouseEnter]
-  );
-
-  const getSlotCount = (day: number, hour: number, minute: number) => {
-    return Object.values(availability).reduce((count, personSlots) => {
-      return personSlots.some(
-        slot => slot.day === day && slot.hour === hour && slot.minute === minute
-      )
-        ? count + 1
-        : count;
-    }, 0);
-  };
-
-  const getSlotPercentage = (day: number, hour: number, minute: number) => {
-    const count = getSlotCount(day, hour, minute);
-    const totalPeople = users.length || 1; // avoid divide by zero
-    return totalPeople ? Math.round((count / totalPeople) * 100) : 0;
-  };
-
-  const getSlotColor = (day: number, hour: number, minute: number) => {
-    const percentage = getSlotPercentage(day, hour, minute);
-    return `bg-gray-${percentage} hover:bg-gray-${percentage + 100}`;
-  };
-
-  const getPeopleAtSlot = (day: number, hour: number, minute: number) => {
-    const peopleAtSlot: string[] = [];
-    Object.entries(availability).forEach(([personId, slots]) => {
-      if (slots.some(slot => slot.day === day && slot.hour === hour && slot.minute === minute)) {
-        const person = users.find(p => p.id === personId);
-        if (person) peopleAtSlot.push(person.name);
-      }
+const generateCalendarDays = (currentDate: Date, turnos: TurnoLocal[]): DiaCalendario[] => {
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  
+  const firstDayOfMonth = new Date(year, month, 1);
+  const lastDayOfMonth = new Date(year, month + 1, 0);
+  
+  // Começar na segunda-feira
+  const startDate = new Date(firstDayOfMonth);
+  const dayOfWeek = firstDayOfMonth.getDay();
+  const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  startDate.setDate(firstDayOfMonth.getDate() - daysToSubtract);
+  
+  const days: DiaCalendario[] = [];
+  const today = new Date();
+  
+  for (let i = 0; i < 42; i++) { // 6 semanas × 7 dias
+    const currentDay = new Date(startDate);
+    currentDay.setDate(startDate.getDate() + i);
+    
+    const dayTurnos = turnos.filter(turno => {
+      if (!turno.dataCompleta) return false;
+      const turnoDate = parseDateString(turno.dataCompleta);
+      return isSameDay(turnoDate, currentDay);
     });
-    return peopleAtSlot;
+    
+    days.push({
+      date: new Date(currentDay),
+      day: currentDay.getDate(),
+      isCurrentMonth: currentDay.getMonth() === month,
+      isToday: isSameDay(currentDay, today),
+      turnos: dayTurnos
+    });
+  }
+  
+  return days;
+};
+
+export default function Turnos(): JSX.Element {
+  const { user } = useUser();
+
+  // --- ESTADOS ---
+  const [turnos, setTurnos] = useState<TurnoLocal[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDay, setSelectedDay] = useState<DiaCalendario | null>(null);
+
+  const [eventos, setEventos] = useState<Evento[]>([]);
+  const [airtableUsers, setAirtableUsers] = useState<User[]>([]); 
+
+  // --- HELPERS PARA UI ---
+  const getNomeParticipanteParaTabela = (id: string) => {
+    const foundRec = airtableUsers.find(u => u.id === id);
+    if (foundRec) return foundRec.nome;
+    const foundIst = airtableUsers.find(u => u.istId?.toString() === id);
+    if (foundIst) return foundIst.nome;
+    return id || "---";
   };
 
-  const getPersonStats = (personId: string) => {
-    const slots = availability[personId] || [];
-    return {
-      totalHours: Math.round(slots.length * 0.5 * 10) / 10,
-      weekPercentage: Math.round((slots.length / (7 * 48)) * 100),
-    };
+  const getNomeEvento = (id: string) => eventos.find(e => e.id === id)?.nome || "Desconhecido";
+
+  // Calendar days
+  const calendarDays = useMemo(() => {
+    return generateCalendarDays(currentMonth, turnos);
+  }, [currentMonth, turnos]);
+
+  // Carregamento Inicial
+  useEffect(() => {
+    loadTurnos();
+    loadEventos();
+    fetchAirtableUsers();
+  }, []);
+
+  // --- ACTIONS ---
+  const loadTurnos = () => {
+    setIsLoading(true);
+    setTimeout(async () => {
+      try {
+        const data = await TurnosService.getTurnos();
+        const turnosProcessados: TurnoLocal[] = data.map(turno => ({
+          ...turno,
+          diaSemana: getWeekDayFromDate(turno.data),
+          dataCompleta: turno.data
+        }));
+        setTurnos(turnosProcessados);
+      } catch (error) {
+        console.error("Erro ao carregar turnos:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }, 500);
   };
- return (
-    <ProtectedPage>
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-blue-500 mb-4">Calendário</h1>
-          <div className="flex flex-wrap gap-4 mb-6">
-            {/* Pessoa Filter */}
-            <div className="bg-white p-4 rounded-lg shadow flex-1 min-w-64">
-              <label
-                htmlFor="person-search"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Selecionar Pessoa:
-              </label>
-              <div className="relative" ref={dropdownRef}>
-                <div className="relative">
-                  <input
-                    ref={inputRef}
-                    id="person-search"
-                    type="text"
-                    value={searchTerm}
-                    onChange={handleInputChange}
-                    onFocus={handleInputFocus}
-                    placeholder="Digite o nome..."
-                    className={`block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm 
-            focus:outline-none focus:ring-blue-500 focus:border-blue-500 
-            ${searchTerm.trim() === "" ? "text-gray-400" : "text-black"}`}
-                  />
-                  {selectedPerson && (
-                    <button
-                      onClick={clearSelection}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                    >
-                      <svg
-                        className="h-5 w-5"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
-                  )}
+
+  const loadEventos = () => {
+    setTimeout(async () => {
+      try {
+        const data = await EventosService.getEventos();
+        setEventos(data || []);
+      } catch (error) {
+        console.error("Erro ao carregar eventos:", error);
+        setEventos([]);
+      }
+    }, 500);
+  };
+
+  async function fetchAirtableUsers() {
+    try { 
+      const users = await ControloPresencasService.getAllUsers(); 
+      setAirtableUsers(users); 
+    } catch (e) { 
+      console.error(e); 
+    }
+  }
+
+  // --- NAVIGATION ---
+  const goToPreviousMonth = () => {
+    setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const goToNextMonth = () => {
+    setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  const goToToday = () => {
+    setCurrentMonth(new Date());
+  };
+
+  const apagarTurno = async (idTurno: string) => {
+    if (window.confirm("Tem a certeza que deseja excluir este turno?")) {
+      try {
+        await TurnosService.apagarTurno(idTurno);
+        loadTurnos();
+      } catch (error) {
+        console.error(error);
+        alert("Erro ao apagar turno.");
+      }
+    }
+  };
+
+  const CalendarView = () => (
+    <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      {/* Calendar Header */}
+      <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">
+            {MESES[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+          </h2>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={goToPreviousMonth}
+              className="p-2 hover:bg-gray-800 rounded-lg transition"
+            >
+              ←
+            </button>
+            <button
+              onClick={goToToday}
+              className="px-4 py-2 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition"
+            >
+              Hoje
+            </button>
+            <button
+              onClick={goToNextMonth}
+              className="p-2 hover:bg-gray-800 rounded-lg transition"
+            >
+              →
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Days of Week Header */}
+      <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
+        {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(day => (
+          <div key={day} className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">
+            {day}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar Grid */}
+      <div className="grid grid-cols-7">
+        {calendarDays.map((dia, index) => (
+          <div
+            key={index}
+            className={`min-h-[120px] p-2 border-b border-r border-gray-100 cursor-pointer hover:bg-gray-50 transition ${
+              !dia.isCurrentMonth ? 'bg-gray-50' : ''
+            } ${dia.isToday ? 'bg-blue-50' : ''}`}
+            onClick={() => setSelectedDay(dia)}
+          >
+            <div className={`text-sm font-medium mb-1 ${
+              !dia.isCurrentMonth 
+                ? 'text-gray-400' 
+                : dia.isToday 
+                  ? 'text-blue-600' 
+                  : 'text-gray-900'
+            }`}>
+              {dia.day}
+            </div>
+            
+            <div className="space-y-1">
+              {dia.turnos.slice(0, 3).map(turno => (
+                <div
+                  key={turno.id}
+                  className={`text-xs px-2 py-1 rounded text-white truncate ${
+                    isTurnoFuturo(turno) ? 'bg-blue-500' : 'bg-gray-500'
+                  }`}
+                  title={`${getNomeEvento(turno.eventoId)} (${turno.horaInicio}-${turno.horaFim})`}
+                >
+                  {turno.horaInicio} {getNomeEvento(turno.eventoId)}
                 </div>
+              ))}
+              {dia.turnos.length > 3 && (
+                <div className="text-xs text-gray-500 text-center">
+                  +{dia.turnos.length - 3} mais
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
-                {isDropdownOpen && filteredPeople.length > 0 && (
-                  <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                    {filteredPeople.map(person => (
-                      <button
-                        key={person.id}
-                        onClick={() => handlePersonSelect(person)}
-                        className={`
-                w-full text-left px-3 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none
-                ${selectedPerson === person.id ? "bg-blue-100 text-blue-900" : "text-gray-900"}
-              `}
-                      >
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium">{person.name}</span>
-                          <span className="text-sm text-gray-500">{person.area}</span>
+  return (
+    <ProtectedPage>
+      <main className="min-h-screen flex flex-col pt-20 px-4 max-w-7xl mx-auto w-full">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl text-white font-semibold">Calendário de Turnos</h1>
+        </div>
+
+        <div className="flex justify-start items-center mb-6">
+          <button 
+            onClick={() => loadTurnos()} 
+            disabled={isLoading} 
+            className="bg-white hover:bg-gray-100 text-black px-6 py-2 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <span className={isLoading ? "animate-spin" : ""}>↻</span>
+            {isLoading ? "A carregar..." : "Refrescar"}
+          </button>
+        </div>
+
+        {/* Calendar */}
+        <CalendarView />
+
+        {/* Day Detail Modal */}
+        {selectedDay && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Turnos de {selectedDay.day} de {MESES[selectedDay.date.getMonth()]} {selectedDay.date.getFullYear()}
+                </h2>
+                <button
+                  onClick={() => setSelectedDay(null)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="p-6 overflow-y-auto flex-1">
+                {selectedDay.turnos.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8">Nenhum turno marcado para este dia</p>
+                ) : (
+                  <div className="space-y-4">
+                    {selectedDay.turnos.map(turno => (
+                      <div key={turno.id} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="font-semibold text-gray-900">{getNomeEvento(turno.eventoId)}</h3>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            isTurnoFuturo(turno) 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {isTurnoFuturo(turno) ? 'Futuro' : 'Passado'}
+                          </span>
                         </div>
-                      </button>
+                        
+                        <div className="space-y-2 text-sm text-gray-600">
+                          <p><strong>Horário:</strong> {turno.horaInicio} - {turno.horaFim}</p>
+                          <p><strong>Responsável:</strong> {getNomeParticipanteParaTabela(turno.responsavelId)}</p>
+                          <p><strong>Participantes:</strong> {turno.participantesIds.map(id => getNomeParticipanteParaTabela(id)).join(', ')}</p>
+                          {turno.observacoes && (
+                            <p><strong>Observações:</strong> {turno.observacoes}</p>
+                          )}
+                        </div>
+                        
+                        <div className="mt-3 flex justify-end">
+                          <button
+                            onClick={() => {
+                              setSelectedDay(null);
+                              apagarTurno(turno.id!);
+                            }}
+                            className="text-red-600 hover:text-red-800 text-sm font-medium"
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      </div>
                     ))}
-                  </div>
-                )}
-
-                {isDropdownOpen && filteredPeople.length === 0 && searchTerm.trim() !== "" && (
-                  <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg">
-                    <div className="px-3 py-2 text-gray-500 text-sm">
-                      Nenhuma pessoa encontrada para &quot;{searchTerm}&quot;
-                    </div>
                   </div>
                 )}
               </div>
             </div>
-
-            {/* Área Filter */}
-            <div className="bg-white p-4 rounded-lg shadow flex-1 min-w-64">
-              <label htmlFor="area-filter" className="block text-sm font-medium text-gray-700 mb-2">
-                Filtrar por Área:
-              </label>
-              <select
-                id="area-filter"
-                value={selectedArea}
-                onChange={e => setSelectedArea(e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm 
-                 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-700"
-              >
-                <option value="">Todas as Áreas</option>
-                {departments.map(area => (
-                  <option key={area} value={area}>
-                    {area}
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
-
-           {/* Calendário */}
-          <div className="bg-white rounded-lg shadow mb-8 overflow-x-auto">
-            <div className="p-4 border-b bg-gray-50 flex justify-between items-center">            
-              <h2 className="text-lg font-semibold text-gray-900">Calendário</h2>
-            </div>
-
-            <div className="relative">
-
-              <table className="min-w-full table-fixed">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="w-20 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 z-9 bg-gray-50 border-r border-gray-200">
-                    Hora
-                  </th>
-                  {DAYS.map((day, index) => (
-                    <th
-                      key={index}
-                      className="w-20 sm:w-24 md:w-28 px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      <div className="block sm:hidden">{day.substring(0, 3)}</div>
-                      <div className="hidden sm:block">{day}</div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className={`bg-white divide-y divide-gray-200 select-none `}>
-                {TIME_SLOTS.map((timeSlot, slotIndex) => (
-                  <tr key={slotIndex}>
-                    <td className="px-4 z-9  whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white border-r">
-                      {/** Show start time - end time (end = next TIME_SLOTS index, wrapped) */}
-                      {timeSlot.hour.toString().padStart(2, "0")}:
-                      {timeSlot.minute.toString().padStart(2, "0")}
-                      -
-                      {timeSlot.minute.toString().padStart(2, "0")}-
-                      {(() => {
-                        // Determine next slot (30 minutes later). Use next index if available, otherwise compute wrap-around.
-                        const nextIndex = slotIndex + 1;
-                        let endHour: number;
-                        let endMinute: number;
-                        if (nextIndex < TIME_SLOTS.length) {
-                          endHour = TIME_SLOTS[nextIndex].hour;
-                          endMinute = TIME_SLOTS[nextIndex].minute;
-                        } else {
-                          // wrap to next day
-                          const totalMinutes = timeSlot.hour * 60 + timeSlot.minute + 30;
-                          endHour = Math.floor(totalMinutes / 60) % 24;
-                          endMinute = totalMinutes % 60;
-                        }
-                        return (
-                          <>
-                            {endHour.toString().padStart(2, "0")}:
-                            {endMinute.toString().padStart(2, "0")}
-                          </>
-                        );
-                      })()}
-                    </td>
-
-                    {DAYS.map((_, dayIndex) => {
-                      const isSelected = isSlotSelected(dayIndex, timeSlot.hour, timeSlot.minute);
-
-                      return (
-                        <td key={dayIndex} className="w-20 sm:w-24 md:w-28 px-1 py-1">
-                          <div
-                            className={`
-                              h-8 sm:h-10 w-full cursor-pointer border border-gray-200 transition-all duration-200 rounded
-                              ${isSelected ? "ring-1 sm:ring-2 ring-blue-500 bg-blue-100" : "bg-gray-50 hover:bg-gray-100"}
-                              ${!selectedPerson ? "cursor-not-allowed opacity-50" : ""}
-                              flex items-center justify-center relative group touch-manipulation
-                            `}
-                            onMouseDown={() =>
-                              handleMouseDown(dayIndex, timeSlot.hour, timeSlot.minute)
-                            }
-                            onMouseEnter={() =>
-                              handleMouseEnter(dayIndex, timeSlot.hour, timeSlot.minute)
-                            }
-                            onTouchStart={() => {
-                                handleMouseDown(dayIndex, timeSlot.hour, timeSlot.minute);
-
-                            }}
-                            onTouchEnd={handleMouseUp}
-                            style={{ touchAction: 'none' }}
-                          >
-                            <span className="text-xs font-medium text-gray-700">
-                              {isSelected ? "✓" : ""}
-                            </span>
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-        </div>
-
-
-
-          {selectedPerson && (
-            <div className="mt-8 bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                Disponibilidade de {users.find(p => p.id === selectedPerson)?.name}
-              </h3>
-              {(() => {
-                const stats = getPersonStats(selectedPerson);
-                return (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-blue-600">{stats.totalHours}h</p>
-                      <p className="text-sm text-gray-600">Horas Totais</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-green-600">{stats.weekPercentage}%</p>
-                      <p className="text-sm text-gray-600">Da Semana</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-purple-600">
-                        {(availability[selectedPerson] || []).length}
-                      </p>
-                      <p className="text-sm text-gray-600">Slots Totais</p>
-                    </div>
-
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-        </div>
+        )}
       </main>
     </ProtectedPage>
   );

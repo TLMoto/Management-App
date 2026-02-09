@@ -4,17 +4,25 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import Image from "next/image";
+import { useUser } from "../components/UserProvider";
 
 const Navbar = () => {
   const router = useRouter();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { isLider } = useUser();
 
   const navigation = [
     { name: "Calendário", href: "/calendario" },
     { name: "Gestão", href: "/gestao" },
     { name: "Pessoal", href: "/pessoal" },
+    { name: "Disponibilidades", href: "/disponibilidades" },
   ];
+
+  // Filter navigation based on user role
+  const filteredNavigation = isLider 
+    ? navigation 
+    : navigation.filter(item => item.href === "/pessoal");
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
@@ -72,7 +80,7 @@ const Navbar = () => {
 
           {/* DESKTOP NAVIGATION */}
           <div className="hidden md:flex items-center space-x-8">
-            {navigation.map(item => (
+            {filteredNavigation.map(item => (
               <Link
                 key={item.name}
                 href={item.href}
@@ -103,7 +111,7 @@ const Navbar = () => {
         {/* MOBILE MENU */}
         {isMobileMenuOpen && (
           <div className="md:hidden bg-black/40 backdrop-blur-md border-t border-white/20 rounded-b-lg px-2 py-3 space-y-1">
-            {navigation.map(item => (
+            {filteredNavigation.map(item => (
               <Link
                 key={item.name}
                 href={item.href}
