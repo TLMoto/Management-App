@@ -5,7 +5,7 @@ import Link from "next/link";
 import React, { JSX } from "react";
 
 const routes: { href: string; label: string }[] = [
-  { href: "/gestao/turnos", label: "Gerir Turnos" },
+  { href: "/gestao/turnos", label: "Gerir Calendário" },
   { href: "/gestao/eventos", label: "Gerir Eventos" },
   { href: "/gestao/membros", label: "Ver Membros" },
   { href: "/gestao/estatisticas", label: "Estatísticas" },

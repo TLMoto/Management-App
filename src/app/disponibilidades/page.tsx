@@ -23,8 +23,15 @@ interface AvailabilityData {
 }
 
 const DAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
-const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => {
-  const totalMinutes = i * 30;
+
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Segunda a Domingo
+
+const START_HOUR = 8;
+
+const TIME_SLOTS = Array.from({ length: 32 }, (_, i) => {
+  // Calculamos os minutos somando o offset da hora de início (8h * 60min)
+  const totalMinutes = i * 30 + (START_HOUR * 60);
+  
   const hour = Math.floor(totalMinutes / 60);
   const minute = totalMinutes % 60;
   return { hour, minute };
@@ -420,13 +427,13 @@ export default function Disponibilidades() {
                     <th className="w-20 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 z-10 bg-gray-50 border-r border-gray-200">
                       Hora
                     </th>
-                    {DAYS.map((day, index) => (
+                    {WEEK_ORDER.map((dayIndex) => (
                       <th
-                        key={index}
+                        key={dayIndex}
                         className="w-20 sm:w-24 md:w-28 px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
                       >
-                        <div className="block sm:hidden">{day.substring(0, 3)}</div>
-                        <div className="hidden sm:block">{day}</div>
+                        <div className="block sm:hidden">{DAYS[dayIndex].substring(0, 3)}</div>
+                        <div className="hidden sm:block">{DAYS[dayIndex]}</div>
                       </th>
                     ))}
                   </tr>
@@ -439,7 +446,7 @@ export default function Disponibilidades() {
                         {timeSlot.minute.toString().padStart(2, "0")}
                       </td>
 
-                      {DAYS.map((_, dayIndex) => {
+                      {WEEK_ORDER.map((dayIndex) => {
                         const count = getSlotCount(dayIndex, timeSlot.hour, timeSlot.minute);
                         const percentage = getSlotPercentage(dayIndex, timeSlot.hour, timeSlot.minute);
                         const peopleAtSlot = getPeopleAtSlot(dayIndex, timeSlot.hour, timeSlot.minute);
