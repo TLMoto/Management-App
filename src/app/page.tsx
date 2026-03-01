@@ -36,6 +36,35 @@ import { Turno, Evento } from "../components/Interfaces";
 
  */
 
+/**
+ * 
+ * type User = {
+  id: string;
+  nome: string;
+  department: string;
+  funcao: string;
+  istId: number;
+};
+
+  const { user, setUser, department, setDepartment, funcao, setFuncao };
+  const hasPermission = (role: string): boolean => {
+    const regex = /^(Sublíder|Líder)(?: de .+)?$/;
+    return regex.test(role);
+  };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const data = await UserService.getUser(99461);
+      setUser(data);
+      setDepartment(data?.department || "");
+      setFuncao(data?.funcao || "");
+    }, [department, user?.funcao]);
+    
+    fetchData();
+  }, [setUser, setDepartment]);
+
+ */
+
 export default function Home() {
   const { members } = useMembers();
   const [eventos, setEventos] = useState<Evento[]>([]);
