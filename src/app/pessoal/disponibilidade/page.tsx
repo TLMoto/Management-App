@@ -17,8 +17,12 @@ interface AvailabilityData {
 
 // parametros do calendario
 const DAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
-const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => {
-  const totalMinutes = 0 * 60 + i * 30;
+
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Segunda a Domingo
+
+const START_HOUR = 8;
+const TIME_SLOTS = Array.from({ length: 32 }, (_, i) => {
+  const totalMinutes = START_HOUR * 60 + i * 30;
   const hour = Math.floor(totalMinutes / 60) % 24;
   const minute = totalMinutes % 60;
   return { hour, minute };
@@ -341,13 +345,13 @@ export default function Disponibilidade() {
                     Hora
                   </th>
 
-                  {DAYS.map((day, index) => (
+                  {WEEK_ORDER.map((dayIndex) => (
                     <th
-                      key={index}
+                      key={dayIndex}
                       className="w-20 sm:w-24 md:w-28 px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
                     >
-                      <div className="block sm:hidden">{day.substring(0, 3)}</div>
-                      <div className="hidden sm:block">{day}</div>
+                      <div className="block sm:hidden">{DAYS[dayIndex].substring(0, 3)}</div>
+                      <div className="hidden sm:block">{DAYS[dayIndex]}</div>
                     </th>
                   ))}
                 </tr>
@@ -389,7 +393,7 @@ export default function Disponibilidade() {
                       })()}
                     </td>
 
-                    {DAYS.map((_, dayIndex) => {
+                    {WEEK_ORDER.map((dayIndex) => {
                       const isSelected = isSlotSelected(dayIndex, timeSlot.hour, timeSlot.minute);
 
                       return (

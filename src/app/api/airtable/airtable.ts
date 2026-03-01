@@ -8,7 +8,7 @@ import {
   Turno,
 } from '@/src/components/Interfaces';
 
-// --- CONFIGURAÇÃO ---
+
 Airtable.configure({
   apiKey: 'patlMkQE4ALuklWbe.33941a853735ffefde5334f0b8aed4e447ab23362dcdb2e4cddb5a167937b827',
   endpointUrl: 'https://api.airtable.com',
@@ -16,22 +16,22 @@ Airtable.configure({
 
 const base = Airtable.base('appPg51nD6h3RpEK2');
 
-// ==================================================================================
-// NOVAS INTERFACES E HELPERS (PARA A PÁGINA DE GESTÃO DE TURNOS)
-// ==================================================================================
-
 export interface TurnoAirtable {
   id?: string;
-  data: string;       // Formato DD/MM/YYYY (Visual)
-  horaInicio: string; // HH:mm
-  horaFim: string;    // HH:mm
+  nome: string;
+  data: string;       
+  horaInicio: string; 
+  horaFim: string;   
   eventoId: string;
   participantesIds: string[];
   responsavelId: string;
   observacoes?: string;
+  tipo?: "Turno" | "Worksession" | "Reunião";
+  isRecurring?: boolean;
+  dataLimiteRecorrencia?: string;
 }
 
-// Helper: Extrair Data (DD/MM/YYYY) de ISO String
+
 const extractDateFromISO = (isoString: string): string => {
   if (!isoString) return "";
   const dateObj = new Date(isoString);
@@ -41,7 +41,7 @@ const extractDateFromISO = (isoString: string): string => {
   return `${day}/${month}/${year}`;
 };
 
-// Helper: Extrair Hora (HH:mm) de ISO String
+
 const extractTimeFromISO = (isoString: string): string => {
   if (!isoString) return "";
   const dateObj = new Date(isoString);
@@ -50,7 +50,7 @@ const extractTimeFromISO = (isoString: string): string => {
   return `${hours}:${minutes}`;
 };
 
-// Helper: Combinar Data (DD/MM/YYYY) + Hora (HH:mm) -> ISO String
+
 const combineDateAndTimeToISO = (dateApp: string, timeApp: string): string => {
   if (!dateApp || !timeApp) return "";
   const [day, month, year] = dateApp.split('/').map(Number);
@@ -59,9 +59,7 @@ const combineDateAndTimeToISO = (dateApp: string, timeApp: string): string => {
   return dateObj.toISOString();
 };
 
-// ==================================================================================
-// SERVIÇOS EXISTENTES (MANTIDOS INTACTOS)
-// ==================================================================================
+
 
 export const ControloPresencasService = {
   async getUserByIstId(istId: number): Promise<User | null> {
@@ -240,7 +238,7 @@ export const EventosService = {
 };
 
 export const TurnosService = {
-  // --- MÉTODOS ORIGINAIS (Mantidos para não partir nada) ---
+ 
 
   async getTurnosAtivos(): Promise<Turno[]> {
     try {
@@ -327,40 +325,40 @@ export const TurnosService = {
   },
 
 
-  // ==================================================================================
-  // NOVOS MÉTODOS ADICIONADOS (PARA A TUA PÁGINA GESTÃO DE TURNOS)
-  // ==================================================================================
-
-  // 1. GET (Ler Turnos para a Tabela de Gestão)
+ 
   async getTurnos(): Promise<TurnoAirtable[]> {
     try {
-      // Removemos 'view' para evitar erro se 'Grid view' não existir
-      // Ordenamos por Data Início (Decrescente)
       const records = await base('Turnos').select({
         sort: [{ field: 'Data Início', direction: 'desc' }]
       }).all();
 
       return records.map(record => {
-        // Extrair campos (Airtable devolve Link como Array)
+        
         const eventoArr = record.get('Evento') as string[] | undefined;
         const participantesArr = record.get('Participantes') as string[] | undefined;
         const responsavelArr = record.get('Responsável') as string[] | undefined;
         
-        // A Airtable guarda data+hora no formato ISO. Ex: "2026-01-14T10:00:00.000Z"
+        
         const startISO = record.get('Data Início') as string; 
         const endISO = record.get('Data Fim') as string;
 
         return {
           id: record.id,
-          // Convertemos para formato visual da App
-          data: extractDateFromISO(startISO),     // ex: "14/01/2026"
-          horaInicio: extractTimeFromISO(startISO), // ex: "10:00"
-          horaFim: extractTimeFromISO(endISO),      // ex: "12:00"
+          nome: record.get('Nome') as string || "",
+         
+          data: extractDateFromISO(startISO),     
+          horaInicio: extractTimeFromISO(startISO), 
+          horaFim: extractTimeFromISO(endISO),      
           
           eventoId: eventoArr && eventoArr.length > 0 ? eventoArr[0] : "",
           participantesIds: participantesArr || [],
           responsavelId: responsavelArr && responsavelArr.length > 0 ? responsavelArr[0] : "",
-          observacoes: record.get('Observações') as string || ""
+          observacoes: record.get('Observações') as string || "",
+          tipo: record.get('Tipo') as any,
+          isRecurring: record.get('Recorrente') as boolean,
+          dataLimiteRecorrencia: record.get('Data Limite Recorrência') as string,
+
+
         };
       });
     } catch (error) {
@@ -369,22 +367,26 @@ export const TurnosService = {
     }
   },
 
-  // 2. CREATE (Criar Turno na Página de Gestão)
+  
   async criarTurno(payload: Omit<TurnoAirtable, 'id'>): Promise<string> {
     try {
-      // Combina a data (14/01/2026) e hora (10:00) num ISO String válido para a Airtable
+      
       const dataInicioISO = combineDateAndTimeToISO(payload.data, payload.horaInicio);
       const dataFimISO = combineDateAndTimeToISO(payload.data, payload.horaFim);
 
       const fields: any = {
+        'Nome': payload.nome,
         'Data Início': dataInicioISO, 
         'Data Fim': dataFimISO,
         'Evento': [payload.eventoId],
         'Participantes': payload.participantesIds,
-        'Observações': payload.observacoes || ''
+        'Observações': payload.observacoes || '',
+        'Tipo': payload.tipo,
+        'Recorrente': payload.isRecurring,
+        'Data Limite Recorrência': payload.dataLimiteRecorrencia
       };
 
-      // Só envia responsável se existir
+      
       if (payload.responsavelId) {
         fields['Responsável'] = [payload.responsavelId];
       }
@@ -399,7 +401,35 @@ export const TurnosService = {
     }
   },
 
-  // 3. DELETE (Apagar Turno na Página de Gestão)
+  async editarTurno(idTurno: string, payload: Omit<TurnoAirtable, 'id'>): Promise<void> {
+    try {
+      const dataInicioISO = combineDateAndTimeToISO(payload.data, payload.horaInicio);
+      const dataFimISO = combineDateAndTimeToISO(payload.data, payload.horaFim);
+
+      const fields: any = {
+        'Nome': payload.nome,
+        'Data Início': dataInicioISO,
+        'Data Fim': dataFimISO,
+        'Evento': [payload.eventoId],
+        'Participantes': payload.participantesIds,
+        'Observações': payload.observacoes || '',
+        'Tipo': payload.tipo,
+        'Recorrente': payload.isRecurring,
+        'Data Limite Recorrência': payload.dataLimiteRecorrencia
+      };
+
+      if (payload.responsavelId) {
+        fields['Responsável'] = [payload.responsavelId];
+      }
+
+      await base('Turnos').update([{ id: idTurno, fields }]);
+    } catch (error) {
+      console.error('Erro ao editar turno (Gestão):', error);
+      throw error;
+    }
+  },    
+
+  
   async apagarTurno(idTurno: string): Promise<void> {
     try {
       await base('Turnos').destroy([idTurno]);

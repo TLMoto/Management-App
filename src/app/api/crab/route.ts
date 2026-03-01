@@ -14,7 +14,6 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(body),
     });
 
-    //console.log('📥 Proxy: Resposta da API:', response.status, response.statusText);
 
     if (!response.ok) {
       const errorText = await response.text();

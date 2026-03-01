@@ -27,6 +27,7 @@ const DIAS_SEMANA = [
 interface TurnoLocal extends TurnoAirtable {
   diaSemana?: number; 
   dataCompleta?: string;
+  isVirtual?: boolean;
 }
 
 interface ParticipanteDisponivel {
@@ -37,7 +38,8 @@ interface ParticipanteDisponivel {
   availability: string[];
   matchPercentage: number; 
   matchedSlots: number;    
-  totalSlotsRequired: number; 
+  totalSlotsRequired: number;
+  departamento?: string; // NOVO CAMPO PARA DEPARTAMENTO
 }
 
 // --- HELPERS ---
@@ -63,6 +65,38 @@ const getNextDateForWeekday = (weekday: number): string => {
   return formatDateToDDMMYYYY(targetDate);
 };
 
+const converterStringParaData = (str: string): Date => {
+  const [day, month, year] = str.split('/').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const expandirTurnosRecorrentes = (turnosOriginais: TurnoLocal[]): TurnoLocal[] => {
+  const listaExpandida: TurnoLocal[] = [];
+
+  turnosOriginais.forEach((turno) => {
+    listaExpandida.push(turno);
+
+    if (turno.tipo !== "Turno" && turno.dataLimiteRecorrencia) {
+      const dataLimite = new Date(turno.dataLimiteRecorrencia);
+      let dataReferencia = converterStringParaData(turno.dataCompleta!);
+
+      while (true) {
+        dataReferencia.setDate(dataReferencia.getDate() + 7);
+        if (dataReferencia > dataLimite) break;
+
+        listaExpandida.push({
+          ...turno,
+          id: `${turno.id}_virtual_${dataReferencia.getTime()}`,
+          dataCompleta: formatDateToDDMMYYYY(new Date(dataReferencia)),
+          isVirtual: true 
+        });
+      }
+    }
+  });
+
+  return listaExpandida;
+};
+
 const isTurnoFuturo = (turno: TurnoLocal): boolean => {
   if (!turno.dataCompleta) return false;
   const [day, month, year] = turno.dataCompleta.split('/').map(Number);
@@ -81,16 +115,15 @@ export default function Turnos(): JSX.Element {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"active" | "historical">("active");
 
-  // Filter states
   const [filterNomeAtivo, setFilterNomeAtivo] = useState("");
   const [filterParticipanteAtivo, setFilterParticipanteAtivo] = useState("");
   const [filterNomeHistorico, setFilterNomeHistorico] = useState("");
   const [filterParticipanteHistorico, setFilterParticipanteHistorico] = useState("");
 
   const [eventos, setEventos] = useState<Evento[]>([]);
-  const [airtableUsers, setAirtableUsers] = useState<User[]>([]); 
-
+  const [airtableUsers, setAirtableUsers] = useState<User[]>([]);
   // Form states
+  const [nomeTurno, setNomeTurno] = useState("");
   const [dataEspecifica, setDataEspecifica] = useState(""); 
   const [usarDataEspecifica, setUsarDataEspecifica] = useState(false);
   const [diaSemana, setDiaSemana] = useState<number | "">("");
@@ -99,14 +132,25 @@ export default function Turnos(): JSX.Element {
   const [eventoSelecionado, setEventoSelecionado] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [responsavelSelecionadoId, setResponsavelSelecionadoId] = useState("");
+  const [tipoTurno, setTipoTurno] = useState<"Turno" | "Worksession" | "Reunião">("Turno");
+  const [dataLimiteRecorrencia, setDataLimiteRecorrencia] = useState("");
   
   // Data states
   const [participantesCrabFit, setParticipantesCrabFit] = useState<PeopleAvailabilityResponse[]>([]);
   const [participantesDisponiveis, setParticipantesDisponiveis] = useState<ParticipanteDisponivel[]>([]);
   const [isLoadingParticipantes, setIsLoadingParticipantes] = useState(false);
   const [participantesSelecionadosIds, setParticipantesSelecionadosIds] = useState<string[]>([]);
+  const [pesquisaParticipantes, setPesquisaParticipantes] = useState("");
+  
+  // NOVOS ESTADOS PARA FILTRO POR DEPARTAMENTO
+  const [filtroDepartamento, setFiltroDepartamento] = useState("");
+  const [departamentosDisponiveis, setDepartamentosDisponiveis] = useState<string[]>([]);
 
-    // --- HELPERS PARA UI ---
+  // Edit States
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingTurnoId, setEditingTurnoId] = useState<string | null>(null);
+
+  // --- HELPERS PARA UI ---
   const getRecordId = (istId: string): string | null => {
     const found = airtableUsers.find(u => u.istId?.toString() === istId);
     return found ? found.id : null;
@@ -121,43 +165,49 @@ export default function Turnos(): JSX.Element {
   };
 
   const getNomeEvento = (id: string) => eventos.find(e => e.id === id)?.nome || "Desconhecido";
-  const getNomeDiaSemana = (dia: number) => DIAS_SEMANA.find(d => d.value === dia)?.label || "Desconhecido";
 
-  // Filtered turnos
   const turnosAtivos = useMemo(() => turnos.filter(isTurnoFuturo), [turnos]);
   const turnosHistoricos = useMemo(() => turnos.filter(turno => !isTurnoFuturo(turno)), [turnos]);
 
   const filteredTurnosAtivos = useMemo(() => {
     return turnosAtivos.filter(turno => {
-      const matchesNome = filterNomeAtivo === "" || 
-        getNomeEvento(turno.eventoId).toLowerCase().includes(filterNomeAtivo.toLowerCase());
-      
+      const matchesNome = filterNomeAtivo === "" || (turno.nome && turno.nome.toLowerCase().includes(filterNomeAtivo.toLowerCase())) || getNomeEvento(turno.eventoId).toLowerCase().includes(filterNomeAtivo.toLowerCase());
       const matchesParticipante = filterParticipanteAtivo === "" ||
-        turno.participantesIds.some(id => 
-          getNomeParticipanteParaTabela(id).toLowerCase().includes(filterParticipanteAtivo.toLowerCase())
-        ) ||
+        turno.participantesIds.some(id => getNomeParticipanteParaTabela(id).toLowerCase().includes(filterParticipanteAtivo.toLowerCase())) ||
         getNomeParticipanteParaTabela(turno.responsavelId).toLowerCase().includes(filterParticipanteAtivo.toLowerCase());
-
       return matchesNome && matchesParticipante;
     });
   }, [turnosAtivos, filterNomeAtivo, filterParticipanteAtivo, eventos, airtableUsers]);
 
   const filteredTurnosHistoricos = useMemo(() => {
     return turnosHistoricos.filter(turno => {
-      const matchesNome = filterNomeHistorico === "" || 
-        getNomeEvento(turno.eventoId).toLowerCase().includes(filterNomeHistorico.toLowerCase());
-      
+      const matchesNome = filterNomeHistorico === "" || (turno.nome && turno.nome.toLowerCase().includes(filterNomeHistorico.toLowerCase())) || getNomeEvento(turno.eventoId).toLowerCase().includes(filterNomeHistorico.toLowerCase());
       const matchesParticipante = filterParticipanteHistorico === "" ||
-        turno.participantesIds.some(id => 
-          getNomeParticipanteParaTabela(id).toLowerCase().includes(filterParticipanteHistorico.toLowerCase())
-        ) ||
+        turno.participantesIds.some(id => getNomeParticipanteParaTabela(id).toLowerCase().includes(filterParticipanteHistorico.toLowerCase())) ||
         getNomeParticipanteParaTabela(turno.responsavelId).toLowerCase().includes(filterParticipanteHistorico.toLowerCase());
-
       return matchesNome && matchesParticipante;
     });
   }, [turnosHistoricos, filterNomeHistorico, filterParticipanteHistorico, eventos, airtableUsers]);
 
-  // Carregamento Inicial
+  // MEMO ATUALIZADO PARA FILTRAR PARTICIPANTES POR NOME E DEPARTAMENTO
+  const participantesFiltrados = useMemo(() => {
+    let filtrados = participantesDisponiveis;
+    
+    // Filtrar por pesquisa de nome
+    if (pesquisaParticipantes) {
+      filtrados = filtrados.filter(p => 
+        p.nomeCompleto.toLowerCase().includes(pesquisaParticipantes.toLowerCase())
+      );
+    }
+    
+    // Filtrar por departamento
+    if (filtroDepartamento) {
+      filtrados = filtrados.filter(p => p.departamento === filtroDepartamento);
+    }
+    
+    return filtrados;
+  }, [participantesDisponiveis, pesquisaParticipantes, filtroDepartamento]);
+
   useEffect(() => {
     loadTurnos();
     loadEventos();
@@ -165,64 +215,49 @@ export default function Turnos(): JSX.Element {
     fetchPeopleFixed();
   }, []);
 
-  // Recalcular participantes ao mudar inputs
   useEffect(() => {
     processarParticipantesDisponiveis();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participantesCrabFit, user, diaSemana, dataEspecifica, usarDataEspecifica, horaInicio, horaFim, airtableUsers]);
 
-  // Limpar responsável
+  // NOVO USEEFFECT PARA EXTRAIR DEPARTAMENTOS ÚNICOS
   useEffect(() => {
-    if (responsavelSelecionadoId && !participantesSelecionadosIds.includes(responsavelSelecionadoId)) {
-      setResponsavelSelecionadoId("");
-    }
-  }, [participantesSelecionadosIds, responsavelSelecionadoId]);
+    const departamentos = [...new Set(
+      participantesDisponiveis
+        .map(p => p.departamento)
+        .filter((dep): dep is string => Boolean(dep && dep.trim() !== ""))
+    )].sort();
+    setDepartamentosDisponiveis(departamentos);
+  }, [participantesDisponiveis]);
 
-  // --- ACTIONS ---
-
-  // Load dos turnos no estilo da página de eventos
-  const loadTurnos = () => {
+  const loadTurnos = async () => {
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(async () => {
-      try {
-        const data = await TurnosService.getTurnos();
-        const turnosProcessados: TurnoLocal[] = data.map(turno => ({
-          ...turno,
-          diaSemana: getWeekDayFromDate(turno.data),
-          dataCompleta: turno.data
-        }));
-        setTurnos(turnosProcessados);
-      } catch (error) {
-        console.error("Erro ao carregar turnos:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    }, 500);
+    try {
+      const data = await TurnosService.getTurnos();
+      const turnosProcessados: TurnoLocal[] = data.map(turno => ({
+        ...turno,
+        diaSemana: getWeekDayFromDate(turno.data),
+        dataCompleta: turno.data
+      }));
+      setTurnos(expandirTurnosRecorrentes(turnosProcessados));
+    } catch (error) {
+      console.error("Erro ao carregar turnos:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // Load dos eventos no estilo da página de eventos
-  const loadEventos = () => {
-  setTimeout(async () => {
+  const loadEventos = async () => {
     try {
       const data = await EventosService.getEventos();
-      // Handle null case by providing empty array as fallback
       setEventos(data || []);
-    } catch (error) {
-      console.error("Erro ao carregar eventos:", error);
-      // Also set empty array on error
-      setEventos([]);
-    }
-  }, 500);
-};
+    } catch (error) { setEventos([]); }
+  };
 
   async function fetchAirtableUsers() {
     try { 
       const users = await ControloPresencasService.getAllUsers(); 
       setAirtableUsers(users); 
-    } catch (e) { 
-      console.error(e); 
-    }
+    } catch (e) { console.error(e); }
   }
 
   async function fetchPeopleFixed() {
@@ -230,11 +265,7 @@ export default function Turnos(): JSX.Element {
     try { 
       const data = await getPeopleAvailability(API_EVENT_ID); 
       setParticipantesCrabFit(data); 
-    } catch (e) { 
-      console.error(e); 
-    } finally { 
-      setIsLoadingParticipantes(false); 
-    }
+    } catch (e) { console.error(e); } finally { setIsLoadingParticipantes(false); }
   }
 
   const generateRequiredSlots = (start: string, end: string, day: number): string[] => {
@@ -253,6 +284,7 @@ export default function Turnos(): JSX.Element {
     return slots;
   };
 
+  // FUNÇÃO ATUALIZADA PARA INCLUIR DEPARTAMENTO
   const processarParticipantesDisponiveis = () => {
     if (!participantesCrabFit || participantesCrabFit.length === 0) {
       setParticipantesDisponiveis([]);
@@ -274,71 +306,124 @@ export default function Turnos(): JSX.Element {
     const participantesProcessados = participantesCrabFit.map(pessoa => {
       const userAirtable = airtableUsers.find(u => u.istId?.toString() === pessoa.name);
       const realName = userAirtable ? userAirtable.nome : pessoa.name; 
+      const departamento = userAirtable?.department || "Sem Departamento"; // OBTER DEPARTAMENTO DO AIRTABLE
       const isCurrentUser = user?.istId?.toString() === pessoa.name;
       const displayName = isCurrentUser ? `${realName} (Eu)` : realName;
-      let matchPercentage = 0;
-      let matchedSlots = 0;
-      if (requiredSlots.length > 0) {
-        matchedSlots = requiredSlots.filter(slot => pessoa.availability.includes(slot)).length;
-        matchPercentage = (matchedSlots / requiredSlots.length) * 100;
-      } else { matchPercentage = 100; }
+      let matchPercentage = (requiredSlots.length > 0) 
+        ? (requiredSlots.filter(slot => pessoa.availability.includes(slot)).length / requiredSlots.length) * 100 
+        : 100;
 
       return {
-        name: pessoa.name, istId: pessoa.name, nomeReal: realName, nomeCompleto: displayName,
-        availability: pessoa.availability, matchPercentage, matchedSlots, totalSlotsRequired: requiredSlots.length
+        name: pessoa.name, 
+        istId: pessoa.name, 
+        nomeReal: realName, 
+        nomeCompleto: displayName,
+        departamento, // NOVO CAMPO
+        availability: pessoa.availability, 
+        matchPercentage, 
+        matchedSlots: (requiredSlots.length > 0 ? requiredSlots.filter(slot => pessoa.availability.includes(slot)).length : 0),
+        totalSlotsRequired: requiredSlots.length
       };
     });
 
-    participantesProcessados.sort((a, b) => {
-      if (Math.abs(b.matchPercentage - a.matchPercentage) > 0.1) return b.matchPercentage - a.matchPercentage;
-      if (a.istId === user?.istId?.toString()) return -1;
-      if (b.istId === user?.istId?.toString()) return 1;
-      return a.nomeCompleto.localeCompare(b.nomeCompleto);
-    });
-
+    participantesProcessados.sort((a, b) => b.matchPercentage - a.matchPercentage || a.nomeCompleto.localeCompare(b.nomeCompleto));
     setParticipantesDisponiveis(participantesProcessados);
   };
 
   const toggleParticipante = (id: string) => {
-    setParticipantesSelecionadosIds(prev => 
-      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
-    );
+    setParticipantesSelecionadosIds(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
   };
 
+  // FUNÇÃO ATUALIZADA PARA SELECIONAR TODOS OS FILTRADOS
+  const handleSelecionarTodos = () => {
+    const idsVisiveis = participantesFiltrados.map(p => p.istId);
+    
+    // Verifica se todos os visíveis já estão selecionados
+    const todosSelecionados = idsVisiveis.every(id => participantesSelecionadosIds.includes(id));
 
+    if (todosSelecionados) {
+      // Desmarca os visíveis
+      setParticipantesSelecionadosIds(prev => prev.filter(id => !idsVisiveis.includes(id)));
+    } else {
+      // Marca os visíveis (mantendo os que já estavam)
+      setParticipantesSelecionadosIds(prev => {
+        const novosIds = idsVisiveis.filter(id => !prev.includes(id));
+        return [...prev, ...novosIds];
+      });
+    }
+  };
 
-  // --- CRIAR TURNO ---
-  const criarTurno = async () => {
-    try {
-      let dataFinal: string;
+  // NOVA FUNÇÃO PARA SELECIONAR TODOS DE UM DEPARTAMENTO
+  const handleSelecionarPorDepartamento = (departamento: string) => {
+    const participantesDoDepto = participantesDisponiveis
+      .filter(p => p.departamento === departamento)
+      .map(p => p.istId);
+    
+    const todosDoDeptoSelecionados = participantesDoDepto.every(id => 
+      participantesSelecionadosIds.includes(id)
+    );
+
+    if (todosDoDeptoSelecionados) {
+      // Desmarca todos do departamento
+      setParticipantesSelecionadosIds(prev => 
+        prev.filter(id => !participantesDoDepto.includes(id))
+      );
+    } else {
+      // Marca todos do departamento
+      setParticipantesSelecionadosIds(prev => {
+        const novosIds = participantesDoDepto.filter(id => !prev.includes(id));
+        return [...prev, ...novosIds];
+      });
+    }
+  };
+
+  // --- ACTIONS ---
+
+  const abrirEdicao = (turno: TurnoLocal) => {  
+    setIsEditing(true);
+    setEditingTurnoId(turno.id || null);
+    
+    setNomeTurno(turno.nome || "");
+    setTipoTurno((turno.tipo as any) || "Turno");
+    setDataLimiteRecorrencia(turno.dataLimiteRecorrencia || "");
+
+    setUsarDataEspecifica(true);
+    setDataEspecifica(turno.dataCompleta || "");
+    setHoraInicio(turno.horaInicio);
+    setHoraFim(turno.horaFim);
+    setEventoSelecionado(turno.eventoId);
+    setObservacoes(turno.observacoes || "");
       
-      if (usarDataEspecifica && dataEspecifica) {
-        dataFinal = dataEspecifica;
-      } else if (!usarDataEspecifica && diaSemana !== "") {
-        dataFinal = getNextDateForWeekday(diaSemana as number);
-      } else {
-        alert("Selecione uma data!");
-        return;
-      }
+    const pIstIds = turno.participantesIds.map(recId => airtableUsers.find(u => u.id === recId)?.istId?.toString() || recId);
+    setParticipantesSelecionadosIds(pIstIds);
 
-      if (!eventoSelecionado || !horaInicio || !horaFim || participantesSelecionadosIds.length === 0 || !responsavelSelecionadoId) {
-        alert("Preencha todos os campos obrigatórios!");
-        return;
-      }
+    const rIstId = airtableUsers.find(u => u.id === turno.responsavelId)?.istId?.toString() || "";
+    setResponsavelSelecionadoId(rIstId);
+
+    setIsModalOpen(true);
+  };
+
+  const handleSalvarTurno = async () => {
+    try {
+      let dataFinal = usarDataEspecifica ? dataEspecifica : (diaSemana !== "" ? getNextDateForWeekday(diaSemana as number) : "");
+      
+      if (!nomeTurno) return alert("Por favor, dê um nome à marcação!");
+      if (!dataFinal) return alert("Selecione uma data!");
+      if (!eventoSelecionado || !horaInicio || !horaFim || participantesSelecionadosIds.length === 0 || !responsavelSelecionadoId) return alert("Preencha os campos obrigatórios!");
+      if (tipoTurno !== "Turno" && !dataLimiteRecorrencia) return alert("Defina até quando a marcação se repete!");
 
       const responsavelRecId = getRecordId(responsavelSelecionadoId);
-      if (!responsavelRecId) {
-        alert("Erro: Responsável não encontrado na base de dados Airtable.");
-        return;
-      }
+      const participantesRecIds = participantesSelecionadosIds.map(id => getRecordId(id)).filter((id): id is string => id !== null);
 
-      const participantesRecIds = participantesSelecionadosIds
-        .map(id => getRecordId(id))
-        .filter((id): id is string => id !== null);
+      if (!responsavelRecId) return alert("Responsável inválido.");
 
       setIsLoading(true);
-
-      const turnoData: Omit<TurnoAirtable, 'id'> = {
+      
+      const turnoData: any = {
+        nome: nomeTurno,
+        tipo: tipoTurno,
+        isRecorrente: tipoTurno !== "Turno",
+        dataLimiteRecorrencia: tipoTurno !== "Turno" ? dataLimiteRecorrencia : undefined,
         data: dataFinal,
         horaInicio,
         horaFim,
@@ -348,39 +433,52 @@ export default function Turnos(): JSX.Element {
         observacoes
       };
 
-      await TurnosService.criarTurno(turnoData);
-      alert("Turno criado com sucesso!");
+      if (isEditing && editingTurnoId) {
+        await TurnosService.editarTurno(editingTurnoId, turnoData);
+        alert("Atualizado!");
+      } else {
+        await TurnosService.criarTurno(turnoData);
+        alert("Criado!");
+      }
+      
       fecharModal();
       loadTurnos();
     } catch (error) {
-      console.error("Erro ao criar turno:", error);
-      alert("Erro ao criar turno. Verifique a consola.");
+      console.error(error);
+      alert("Erro ao guardar.");
     } finally {
       setIsLoading(false);
     }
   };
 
   const apagarTurno = async (idTurno: string) => {
-    if (window.confirm("Tem a certeza que deseja excluir este turno?")) {
+    if (window.confirm("Tem a certeza que deseja excluir?")) {
       try {
         await TurnosService.apagarTurno(idTurno);
         loadTurnos();
-      } catch (error) {
-        console.error(error);
-        alert("Erro ao apagar turno.");
-      }
+      } catch (error) { alert("Erro ao apagar."); }
     }
   };
 
   const fecharModal = () => {
     setIsModalOpen(false);
+    setIsEditing(false);
+    setEditingTurnoId(null);
+    
+    setNomeTurno("");
+    setTipoTurno("Turno");
+    setDataLimiteRecorrencia("");
+    
     setUsarDataEspecifica(false);
     setDataEspecifica("");
     setDiaSemana(""); setHoraInicio(""); setHoraFim("");
     setEventoSelecionado(""); setParticipantesSelecionadosIds([]);
     setResponsavelSelecionadoId(""); setObservacoes("");
+    setPesquisaParticipantes(""); // Reset da pesquisa
+    setFiltroDepartamento(""); // Reset do filtro de departamento
   };
 
+  // BADGE DE DISPONIBILIDADE
   const renderAvailabilityBadge = (percentage: number, matched: number, total: number) => {
     if (total === 0) return null;
     if (percentage === 100) return <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase bg-green-100 text-green-700 border border-green-200">Disponível</span>;
@@ -395,38 +493,48 @@ export default function Turnos(): JSX.Element {
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Horário</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Evento</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Responsável</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Participantes</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {turnosList.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                  {isLoading ? "A carregar turnos..." : `Nenhum turno ${isHistorical ? 'histórico' : 'ativo'} encontrado.`}
+            {turnosList.map((turno) => (
+              <tr key={turno.id} className={turno.isVirtual ? "bg-gray-50 italic text-gray-500" : "hover:bg-gray-50"}>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                  {turno.dataCompleta}
+                  {turno.isVirtual && <span className="ml-2 text-[10px] text-blue-500 font-normal">(Repetição)</span>}
+                </td>
+                <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                  {turno.nome || "---"}
+                  <div className="text-[10px] font-normal text-gray-500">{getNomeEvento(turno.eventoId)}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                    turno.tipo === "Worksession" ? "bg-purple-100 text-purple-700" : 
+                    turno.tipo === "Reunião" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
+                  }`}>
+                    {turno.tipo || "Turno"}
+                  </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{turno.horaInicio} - {turno.horaFim}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600">{getNomeParticipanteParaTabela(turno.responsavelId)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  {!turno.isVirtual ? (
+                    <div className="flex justify-end gap-3">
+                      <button onClick={() => abrirEdicao(turno)} className="text-blue-600 hover:underline">Editar</button>
+                      <button onClick={() => apagarTurno(turno.id!)} className={`hover:underline ${isHistorical ? 'text-orange-600' : 'text-red-600'}`}>Apagar</button>
+                    </div>
+                  ) : (
+                    <span className="text-gray-400 text-xs">Editar no original</span>
+                  )}
                 </td>
               </tr>
-            ) : (
-              turnosList.map((turno) => (
-                <tr key={turno.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{turno.dataCompleta}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{turno.horaInicio} - {turno.horaFim}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{getNomeEvento(turno.eventoId)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600">{getNomeParticipanteParaTabela(turno.responsavelId)}</td>
-                  <td className="px-6 py-4 text-sm text-gray-700 max-w-xs truncate">{turno.participantesIds.map(id => getNomeParticipanteParaTabela(id)).join(", ")}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button 
-                      onClick={() => apagarTurno(turno.id!)} 
-                      className={`hover:underline ${isHistorical ? 'text-orange-600' : 'text-red-600'}`}
-                    >
-                      Apagar
-                    </button>
-                  </td>
-                </tr>
-              ))
+            ))}
+            {turnosList.length === 0 && (
+              <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">{isLoading ? "A carregar..." : "Nenhum registo encontrado."}</td></tr>
             )}
           </tbody>
         </table>
@@ -438,291 +546,215 @@ export default function Turnos(): JSX.Element {
     <ProtectedPage>
       <main className="min-h-screen flex flex-col pt-20 px-4 max-w-7xl mx-auto w-full">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl text-white font-semibold">Gestão de Turnos</h1>
+          <h1 className="text-3xl text-white font-semibold">Gestão de Calendário</h1>
+          <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium shadow-md transition">+ Criar Marcação</button>
         </div>
 
-        <div className="flex justify-between items-center mb-8">
-          <button 
-            onClick={() => loadTurnos()} 
-            disabled={isLoading} 
-            className="bg-white hover:bg-gray-100 text-black px-6 py-2 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <span className={isLoading ? "animate-spin" : ""}>↻</span>
-            {isLoading ? "A carregar..." : "Refrescar"}
-          </button>
-          <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition">
-            + Criar Turno
-          </button>
-        </div>
-
-        {/* Tabs */}
         <div className="mb-6">
-          <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8">
-              <button
-                onClick={() => setActiveTab("active")}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition ${
-                  activeTab === "active"
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300"
-                }`}
-              >
-                Turnos Ativos
-                <span className="ml-2 bg-blue-100 text-blue-600 py-0.5 px-2.5 rounded-full text-xs font-medium">
-                  {turnosAtivos.length}
-                </span>
-              </button>
-              <button
-                onClick={() => setActiveTab("historical")}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition ${
-                  activeTab === "historical"
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300"
-                }`}
-              >
-                Turnos Históricos
-                <span className="ml-2 bg-gray-100 text-gray-600 py-0.5 px-2.5 rounded-full text-xs font-medium">
-                  {turnosHistoricos.length}
-                </span>
-              </button>
+            <nav className="flex space-x-4 border-b border-gray-200 pb-2">
+                <button onClick={() => setActiveTab("active")} className={`pb-2 px-4 ${activeTab === "active" ? "border-b-2 border-blue-500 text-blue-500 font-bold" : "text-gray-400"}`}>Ativos</button>
+                <button onClick={() => setActiveTab("historical")} className={`pb-2 px-4 ${activeTab === "historical" ? "border-b-2 border-blue-500 text-blue-500 font-bold" : "text-gray-400"}`}>Histórico</button>
             </nav>
-          </div>
         </div>
 
-        {/* Active Turnos Tab */}
-        {activeTab === "active" && (
-          <>
-            {/* Filters for Active Turnos */}
-            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-              <h2 className="text-lg text-black font-medium mb-4">Filtros</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nome do Evento
-                  </label>
-                  <input
-                    type="text"
-                    value={filterNomeAtivo}
-                    onChange={e => setFilterNomeAtivo(e.target.value)}
-                    placeholder="Filtrar por evento..."
-                    className="w-full px-4 py-2 border text-gray-500 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Pessoa</label>
-                  <input
-                    type="text"
-                    value={filterParticipanteAtivo}
-                    onChange={e => setFilterParticipanteAtivo(e.target.value)}
-                    placeholder="Filtrar por participante..."
-                    className="w-full px-4 py-2 border text-gray-500 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-            </div>
+        <TurnosTable turnos={activeTab === "active" ? filteredTurnosAtivos : filteredTurnosHistoricos} isHistorical={activeTab === "historical"} />
 
-            <TurnosTable turnos={filteredTurnosAtivos} isHistorical={false} />
-          </>
-        )}
-
-        {/* Historical Turnos Tab */}
-        {activeTab === "historical" && (
-          <>
-            {/* Filters for Historical Turnos */}
-            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-              <h2 className="text-lg text-black font-medium mb-4">Filtros</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nome do Evento
-                  </label>
-                  <input
-                    type="text"
-                    value={filterNomeHistorico}
-                    onChange={e => setFilterNomeHistorico(e.target.value)}
-                    placeholder="Filtrar por evento..."
-                    className="w-full px-4 py-2 border text-gray-500 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Pessoa</label>
-                  <input
-                    type="text"
-                    value={filterParticipanteHistorico}
-                    onChange={e => setFilterParticipanteHistorico(e.target.value)}
-                    placeholder="Filtrar por participante..."
-                    className="w-full px-4 py-2 border text-gray-500 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <TurnosTable turnos={filteredTurnosHistoricos} isHistorical={true} />
-          </>
-        )}
-
-        {/* MODAL */}
         {isModalOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
-              
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                <h2 className="text-xl text-gray-900 font-bold">Criar Novo Turno</h2>
-                <button onClick={fecharModal} className="text-gray-500 hover:text-gray-800 text-xl font-bold px-2">X</button>
+              <div className="p-6 border-b flex justify-between items-center">
+                <h2 className="text-xl text-gray-900 font-bold">{isEditing ? "Editar Marcação" : "Nova Marcação"}</h2>
+                <button onClick={fecharModal} className="text-gray-500 hover:text-black text-xl">✕</button>
               </div>
 
-              <div className="p-6 overflow-y-auto space-y-5">
-                
-                {/* 1. Evento */}
+              <div className="p-6 overflow-y-auto space-y-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Evento Associado *</label>
-                  <select
-                    value={eventoSelecionado}
-                    onChange={e => setEventoSelecionado(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-                  >
-                    <option value="">Selecione o evento...</option>
-                    {eventos.map(ev => (<option key={ev.id} value={ev.id}>{ev.nome}</option>))}
-                  </select>
+                  <label className="block text-sm font-semibold text-gray-700">Nome da Marcação *</label>
+                  <input 
+                    type="text" 
+                    value={nomeTurno} 
+                    onChange={e => setNomeTurno(e.target.value)} 
+                    placeholder="Ex: Reunião Geral, Worksession Design..."
+                    className="w-full p-2 mt-1 border rounded text-black focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
 
-                {/* 2. Data */}
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-3">
-                    <input
-                      type="checkbox"
-                      id="usarDataEspecifica"
-                      checked={usarDataEspecifica}
-                      onChange={e => setUsarDataEspecifica(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                    <label htmlFor="usarDataEspecifica" className="text-sm font-medium text-gray-700">Usar data específica</label>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700">Tipo de Marcação</label>
+                  <div className="flex gap-2 mt-2">
+                    {["Turno", "Worksession", "Reunião"].map(t => (
+                        <button 
+                          key={t} 
+                          onClick={() => setTipoTurno(t as any)} 
+                          className={`flex-1 py-2 rounded border text-sm transition ${tipoTurno === t ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                        >
+                            {t}
+                        </button>
+                    ))}
                   </div>
+                </div>
 
-                  {usarDataEspecifica ? (
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Data Específica *</label>
-                      <input
-                        type="date"
-                        value={dataEspecifica.split('/').reverse().join('-')} 
-                        onChange={e => {
-                          const [year, month, day] = e.target.value.split('-');
-                          setDataEspecifica(`${day}/${month}/${year}`);
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-gray-900"
-                      />
+                {tipoTurno !== "Turno" && (
+                    <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
+                        <label className="block text-xs font-bold text-blue-700 mb-1 uppercase">Repetir semanalmente até:</label>
+                        <input 
+                          type="date" 
+                          value={dataLimiteRecorrencia} 
+                          onChange={e => setDataLimiteRecorrencia(e.target.value)} 
+                          className="w-full p-2 border rounded text-black text-sm" 
+                        />
                     </div>
-                  ) : (
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Dia da Semana *</label>
-                      <select
-                        value={diaSemana}
-                        onChange={e => setDiaSemana(e.target.value === "" ? "" : parseInt(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-                      >
-                        <option value="">Selecione...</option>
-                        {DIAS_SEMANA.map(dia => (<option key={dia.value} value={dia.value}>{dia.label}</option>))}
-                      </select>
-                      {!usarDataEspecifica && diaSemana !== "" && (
-                        <p className="text-xs text-gray-500 mt-1">Próxima data: {getNextDateForWeekday(diaSemana as number)}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* 3. Horários */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Início *</label>
-                    <input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)} step="1800" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-gray-900" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Fim *</label>
-                    <input type="time" value={horaFim} onChange={e => setHoraFim(e.target.value)} step="1800" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-gray-900" />
-                  </div>
-                </div>
-
-                {/* Info */}
-                {horaInicio && horaFim && ((usarDataEspecifica && dataEspecifica) || (!usarDataEspecifica && diaSemana !== "")) && (
-                  <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
-                    <p className="text-xs text-blue-700">
-                      📅 <strong>{usarDataEspecifica ? dataEspecifica : `${getNomeDiaSemana(diaSemana as number)} (${getNextDateForWeekday(diaSemana as number)})`}</strong> das <strong>{horaInicio}</strong> às <strong>{horaFim}</strong>
-                    </p>
-                  </div>
                 )}
 
-                {/* 4. Participantes */}
+                {/* Evento */}
                 <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block text-sm font-semibold text-gray-700">Membros *</label>
-                    {isLoadingParticipantes && <span className="text-xs text-blue-600 animate-pulse">A atualizar...</span>}
-                  </div>
-                  <div className="border border-gray-200 rounded-md max-h-64 overflow-y-auto p-0 bg-gray-50">
-                    {isLoadingParticipantes && participantesDisponiveis.length === 0 ? (
-                       <p className="text-xs text-gray-500 p-4">A carregar dados...</p>
-                    ) : participantesDisponiveis.length > 0 ? (
-                      participantesDisponiveis.map(pessoa => (
-                        <label key={pessoa.istId} className={`flex items-center p-3 hover:bg-white cursor-pointer transition border-b border-gray-100 last:border-0 relative ${pessoa.matchPercentage === 0 && horaInicio ? 'bg-gray-100 opacity-60' : 'bg-white'}`}>
-                          {horaInicio && horaFim && pessoa.matchPercentage > 0 && pessoa.matchPercentage < 100 && (
-                             <div className="absolute left-0 top-0 bottom-0 bg-yellow-50 opacity-50 z-0" style={{ width: `${pessoa.matchPercentage}%` }} />
-                          )}
-                          <input type="checkbox" checked={participantesSelecionadosIds.includes(pessoa.istId)} onChange={() => toggleParticipante(pessoa.istId)} className="mt-0.5 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 z-10" />
-                          <div className="ml-3 flex flex-col flex-1 z-10">
-                            <div className="flex justify-between items-center w-full">
-                              <span className={`text-sm font-medium ${pessoa.matchPercentage === 0 && horaInicio ? 'text-gray-500' : 'text-gray-900'}`}>{pessoa.nomeCompleto}</span>
-                              {((usarDataEspecifica && dataEspecifica) || (!usarDataEspecifica && diaSemana !== "")) && horaInicio && horaFim && renderAvailabilityBadge(pessoa.matchPercentage, pessoa.matchedSlots, pessoa.totalSlotsRequired)}
-                            </div>
-                            <div className="mt-0.5 flex items-center gap-2"><span className="text-[10px] text-gray-400">ID: {pessoa.istId}</span></div>
-                          </div>
-                        </label>
-                      ))
-                    ) : (
-                      <div className="p-4 text-center"><p className="text-sm text-gray-500">Nenhum dado.</p></div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 5. Responsável */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Responsável *</label>
-                  <select
-                    value={responsavelSelecionadoId}
-                    onChange={e => setResponsavelSelecionadoId(e.target.value)}
-                    disabled={participantesSelecionadosIds.length === 0}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white disabled:bg-gray-100"
-                  >
-                    <option value="">{participantesSelecionadosIds.length === 0 ? "Selecione participantes..." : "Escolha o responsável..."}</option>
-                    {participantesDisponiveis
-                      .filter(p => participantesSelecionadosIds.includes(p.istId))
-                      .map(p => (<option key={p.istId} value={p.istId}>{p.nomeReal}</option>))
-                    }
+                  <label className="block text-sm font-semibold text-gray-700">Evento Associado *</label>
+                  <select value={eventoSelecionado} onChange={e => setEventoSelecionado(e.target.value)} className="w-full p-2 border rounded text-black mt-1">
+                    <option value="">Selecione...</option>
+                    {eventos.map(ev => <option key={ev.id} value={ev.id}>{ev.nome}</option>)}
                   </select>
                 </div>
 
-                {/* 6. Obs */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Observações</label>
-                  <textarea value={observacoes} onChange={e => setObservacoes(e.target.value)} rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-gray-900" placeholder="Notas..."/>
+                {/* Data */}
+                <div className="flex items-center gap-2 mt-2">
+                    <input type="checkbox" id="checkDate" checked={usarDataEspecifica} onChange={e => setUsarDataEspecifica(e.target.checked)} />
+                    <label htmlFor="checkDate" className="text-sm text-gray-700 italic">Data específica da 1ª sessão</label>
+                </div>
+                {usarDataEspecifica ? (
+                    <input type="date" value={dataEspecifica.split('/').reverse().join('-')} onChange={e => setDataEspecifica(e.target.value.split('-').reverse().join('/'))} className="w-full p-2 border rounded text-black" />
+                ) : (
+                    <select value={diaSemana} onChange={e => setDiaSemana(e.target.value === "" ? "" : Number(e.target.value))} className="w-full p-2 border rounded text-black">
+                        <option value="">Dia da semana...</option>
+                        {DIAS_SEMANA.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                    </select>
+                )}
+
+                {/* Horários */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-gray-500 font-semibold">Início</label>
+                      <input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)} className="w-full p-2 border rounded text-black mt-1" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 font-semibold">Fim</label>
+                      <input type="time" value={horaFim} onChange={e => setHoraFim(e.target.value)} className="w-full p-2 border rounded text-black mt-1" />
+                    </div>
                 </div>
 
-              </div>
-              
-              <div className="p-6 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
-                <button onClick={fecharModal} className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-white text-sm">Cancelar</button>
-                <button 
-                  onClick={criarTurno} 
-                  disabled={
-                    (!usarDataEspecifica && diaSemana === "") || 
-                    (usarDataEspecifica && !dataEspecifica) ||
-                    !horaInicio || !horaFim || !eventoSelecionado || 
-                    participantesSelecionadosIds.length === 0 || !responsavelSelecionadoId || isLoading
-                  } 
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm shadow-sm"
-                >
-                  {isLoading ? "A guardar..." : "Criar Turno"}
-                </button>
+                {/* SEÇÃO DE PARTICIPANTES ATUALIZADA COM FILTRO POR DEPARTAMENTO */}
+                <div className="pt-2 border-t">
+                  <div className="flex justify-between items-center mb-3">
+                    <label className="block text-sm font-semibold text-gray-700">Participantes</label>
+                    <button 
+                      type="button" 
+                      onClick={handleSelecionarTodos}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      {participantesFiltrados.every(p => participantesSelecionadosIds.includes(p.istId)) && participantesFiltrados.length > 0
+                        ? "Desmarcar Visíveis" 
+                        : "Selecionar Visíveis"}
+                    </button>
+                  </div>
+                  
+                  {/* FILTROS - NOME E DEPARTAMENTO */}
+                  <div className="space-y-2 mb-3">
+                    <input
+                      type="text"
+                      placeholder="Pesquisar por nome..."
+                      value={pesquisaParticipantes}
+                      onChange={(e) => setPesquisaParticipantes(e.target.value)}
+                      className="w-full p-2 text-sm border rounded text-black focus:ring-2 focus:ring-blue-500"
+                    />
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        value={filtroDepartamento}
+                        onChange={(e) => setFiltroDepartamento(e.target.value)}
+                        className="w-full p-2 text-sm border rounded text-black focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Todos os departamentos</option>
+                        {departamentosDisponiveis.map(dep => (
+                          <option key={dep} value={dep}>{dep}</option>
+                        ))}
+                      </select>
+                      
+                      {filtroDepartamento && (
+                        <button
+                          type="button"
+                          onClick={() => handleSelecionarPorDepartamento(filtroDepartamento)}
+                          className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded px-2 py-1 border transition"
+                        >
+                          {participantesDisponiveis
+                            .filter(p => p.departamento === filtroDepartamento)
+                            .every(p => participantesSelecionadosIds.includes(p.istId))
+                            ? `Desmarcar ${filtroDepartamento}` 
+                            : `Selecionar ${filtroDepartamento}`}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* LISTA DE PARTICIPANTES */}
+                  <div className="border rounded bg-white max-h-48 overflow-y-auto">
+                      {participantesFiltrados.length === 0 ? (
+                        <p className="p-3 text-sm text-gray-500 text-center">
+                          {pesquisaParticipantes || filtroDepartamento 
+                            ? "Nenhum participante encontrado com os filtros aplicados." 
+                            : "Nenhum participante encontrado."}
+                        </p>
+                      ) : (
+                        participantesFiltrados.map(p => (
+                            <label key={p.istId} className="flex justify-between items-center p-2 hover:bg-gray-50 border-b last:border-0 cursor-pointer text-black">
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={participantesSelecionadosIds.includes(p.istId)} 
+                                    onChange={() => toggleParticipante(p.istId)} 
+                                    className="shrink-0"
+                                  />
+                                  <div className="min-w-0">
+                                    <span className="text-sm truncate block" title={p.nomeCompleto}>{p.nomeCompleto}</span>
+                                    {p.departamento && (
+                                      <span className="text-xs text-gray-500 truncate block" title={p.departamento}>{p.departamento}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="shrink-0 pl-2">
+                                  {renderAvailabilityBadge(p.matchPercentage, p.matchedSlots, p.totalSlotsRequired)}
+                                </div>
+                            </label>
+                        ))
+                      )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {participantesSelecionadosIds.length} selecionado(s) de {participantesDisponiveis.length} totais
+                    {(pesquisaParticipantes || filtroDepartamento) && (
+                      <span> • {participantesFiltrados.length} visíveis</span>
+                    )}
+                  </p>
+                </div>
+
+                {/* Responsável e Observações */}
+                <select value={responsavelSelecionadoId} onChange={e => setResponsavelSelecionadoId(e.target.value)} className="w-full p-2 border rounded text-black mt-2">
+                    <option value="">Responsável...</option>
+                    {participantesDisponiveis.filter(p => participantesSelecionadosIds.includes(p.istId)).map(p => (
+                        <option key={p.istId} value={p.istId}>{p.nomeReal}</option>
+                    ))}
+                </select>
+
+                <textarea value={observacoes} onChange={e => setObservacoes(e.target.value)} placeholder="Observações..." className="w-full p-2 border rounded text-black" rows={2} />
               </div>
 
+              <div className="p-6 border-t flex justify-end gap-3 bg-gray-50">
+                <button onClick={fecharModal} className="px-4 py-2 text-gray-600">Cancelar</button>
+                <button 
+                  onClick={handleSalvarTurno} 
+                  disabled={isLoading}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300"
+                >
+                  {isLoading ? "A guardar..." : (isEditing ? "Guardar Alterações" : "Criar Marcação")}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -730,4 +762,3 @@ export default function Turnos(): JSX.Element {
     </ProtectedPage>
   );
 }
-
