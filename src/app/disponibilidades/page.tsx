@@ -2,7 +2,7 @@
 
 import ProtectedPage from "@/src/components/ProtectedPage";
 import { useState, useEffect } from "react";
-import { ControloPresencasService } from "@/src/app/api/airtable/airtable";
+import { getAllUsers, getAllDepartments } from "@/src/app/api/airtable/airtable";
 import { getPeopleAvailability } from "@/src/app/api/crab/api";
 
 interface TimeSlot {
@@ -145,7 +145,7 @@ export default function Disponibilidades() {
         setIsLoading(true);
         
         // Load users from Airtable
-        const allUsers = await ControloPresencasService.getAllUsers();
+        const allUsers = await getAllUsers();
         if (!mounted) return;
         
         const mappedUsers: Person[] = allUsers.map(u => ({ 
@@ -222,7 +222,7 @@ export default function Disponibilidades() {
     let mounted = true;
     (async () => {
       try {
-        const deps = await ControloPresencasService.getAllDepartments();
+        const deps = await getAllDepartments();
         if (mounted) setDepartments(deps);
       } catch (err) {
         // Silent error handling

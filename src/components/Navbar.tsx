@@ -103,7 +103,7 @@ const Navbar = () => {
               alt="TLMoto Logo"
               width={100}
               height={150}
-              className="rounded-full"
+              className=""
             />
           </Link>
         </div>
