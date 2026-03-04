@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useUser } from "../../components/UserProvider";
 import { useRouter } from "next/navigation";
-import { ControloPresencasService } from "../api/airtable/airtable";
+import { getUserByIstId } from "../api/airtable/airtable";
 
 export default function Login() {
   const { setUser } = useUser();
@@ -20,7 +20,7 @@ export default function Login() {
   /* Verifica se o utilizador existe e faz login */
   const handleLogin = async () => {
     if (input.trim() !== "") {
-      const user = await ControloPresencasService.getUserByIstId(Number(input));
+      const user = await getUserByIstId(Number(input));
       if (user) {
         setUser(user);
         router.push("/pessoal");

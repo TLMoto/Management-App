@@ -2,7 +2,7 @@
 
 import ProtectedPage from "@/src/components/ProtectedPage";
 import { useState, useCallback, useRef, useEffect } from "react";
-import { getEvent, loginOrCreatePerson, updateAvailability } from "../../api/crab/api";
+import { loginOrCreatePerson, updateAvailability } from "../../api/crab/api";
 import { useUser } from "@/src/components/UserProvider";
 
 interface TimeSlot {
