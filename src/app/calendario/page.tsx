@@ -5,9 +5,9 @@ import type { JSX } from 'react';
 import { useUser } from "@/src/components/UserProvider";
 import ProtectedPage from "@/src/components/ProtectedPage";
 import { 
-  EventosService, 
-  TurnosService, 
-  ControloPresencasService,
+  getTurnos,
+  getEventos,
+  getAllUsers,
   TurnoAirtable 
 } from "../api/airtable/airtable";
 import { Evento, User } from "@/src/components/Interfaces"; 
@@ -182,7 +182,7 @@ export default function Calendario(): JSX.Element {
   const loadTurnos = async () => {
     setIsLoading(true);
     try {
-      const data = await TurnosService.getTurnos();
+      const data = await getTurnos();
       const processados: TurnoLocal[] = data.map(turno => ({
         ...turno,
         diaSemana: getWeekDayFromDate(turno.data),
@@ -200,14 +200,14 @@ export default function Calendario(): JSX.Element {
 
   const loadEventos = async () => {
     try {
-      const data = await EventosService.getEventos();
+      const data = await getEventos();
       setEventos(data || []);
     } catch (error) { setEventos([]); }
   };
 
   async function fetchAirtableUsers() {
     try { 
-      const users = await ControloPresencasService.getAllUsers(); 
+      const users = await getAllUsers(); 
       setAirtableUsers(users); 
     } catch (e) { console.error(e); }
   }

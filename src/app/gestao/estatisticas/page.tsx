@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar, Users, Clock, TrendingUp, Search, PieChart, BarChart3 } from "lucide-react";
 import { useMembers, useMembersByAreaArray } from "@/src/components/MemberProvider";
-import { EventosService, TurnosService } from "../../api/airtable/airtable";
+import { getEventos, getHistoricoTurnos } from "../../api/airtable/airtable";
 import { Evento, Turno } from "@/src/components/Interfaces";
 import ProtectedPage from "@/src/components/ProtectedPage";
 import {
@@ -49,7 +49,7 @@ const StatisticsPage = () => {
   }, []);
 
   const loadEventos = () => {
-    EventosService.getEventos()
+    getEventos()
       .then(eventos => {
         setEventos(eventos || []);
       })
@@ -60,7 +60,7 @@ const StatisticsPage = () => {
   };
 
   const loadTurnos = () => {
-    TurnosService.getHistoricoTurnos()
+    getHistoricoTurnos()
       .then(turnos => {
         setTurnos(turnos || []);
       })

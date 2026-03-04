@@ -4,10 +4,13 @@ import { useUser } from "@/src/components/UserProvider";
 import React, { JSX, useEffect, useState, useMemo } from "react";
 
 import { 
-  EventosService, 
-  TurnosService, 
-  ControloPresencasService,
-  TurnoAirtable 
+  getEventos, 
+  getTurnos,
+  getAllUsers,
+  TurnoAirtable,
+  editarTurno,
+  criarTurno,
+  apagarTurno
 } from "../../api/airtable/airtable";
 import { Evento, User } from "@/src/components/Interfaces"; 
 import { getPeopleAvailability, PeopleAvailabilityResponse } from "../../api/crab/api";
@@ -232,7 +235,7 @@ export default function Turnos(): JSX.Element {
   const loadTurnos = async () => {
     setIsLoading(true);
     try {
-      const data = await TurnosService.getTurnos();
+      const data = await getTurnos();
       const turnosProcessados: TurnoLocal[] = data.map(turno => ({
         ...turno,
         diaSemana: getWeekDayFromDate(turno.data),
@@ -248,14 +251,14 @@ export default function Turnos(): JSX.Element {
 
   const loadEventos = async () => {
     try {
-      const data = await EventosService.getEventos();
+      const data = await getEventos();
       setEventos(data || []);
     } catch (error) { setEventos([]); }
   };
 
   async function fetchAirtableUsers() {
     try { 
-      const users = await ControloPresencasService.getAllUsers(); 
+      const users = await getAllUsers(); 
       setAirtableUsers(users); 
     } catch (e) { console.error(e); }
   }
@@ -434,10 +437,10 @@ export default function Turnos(): JSX.Element {
       };
 
       if (isEditing && editingTurnoId) {
-        await TurnosService.editarTurno(editingTurnoId, turnoData);
+        await editarTurno(editingTurnoId, turnoData);
         alert("Atualizado!");
       } else {
-        await TurnosService.criarTurno(turnoData);
+        await criarTurno(turnoData);
         alert("Criado!");
       }
       
@@ -451,10 +454,10 @@ export default function Turnos(): JSX.Element {
     }
   };
 
-  const apagarTurno = async (idTurno: string) => {
+  const apagarTurnoApp = async (idTurno: string) => {
     if (window.confirm("Tem a certeza que deseja excluir?")) {
       try {
-        await TurnosService.apagarTurno(idTurno);
+        await apagarTurno(idTurno);
         loadTurnos();
       } catch (error) { alert("Erro ao apagar."); }
     }
@@ -525,7 +528,7 @@ export default function Turnos(): JSX.Element {
                   {!turno.isVirtual ? (
                     <div className="flex justify-end gap-3">
                       <button onClick={() => abrirEdicao(turno)} className="text-blue-600 hover:underline">Editar</button>
-                      <button onClick={() => apagarTurno(turno.id!)} className={`hover:underline ${isHistorical ? 'text-orange-600' : 'text-red-600'}`}>Apagar</button>
+                      <button onClick={() => apagarTurnoApp(turno.id!)} className={`hover:underline ${isHistorical ? 'text-orange-600' : 'text-red-600'}`}>Apagar</button>
                     </div>
                   ) : (
                     <span className="text-gray-400 text-xs">Editar no original</span>

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "./UserProvider";
 import { useMembers } from "./MemberProvider";
-import { ControloPresencasService } from "../app/api/airtable/airtable";
+import { getAllUsers } from "../app/api/airtable/airtable";
 
 interface ProtectedPageProps {
   children: React.ReactNode;
@@ -16,30 +16,40 @@ export default function ProtectedPage({ children }: ProtectedPageProps) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
+  // 1. Hook para Hydration (Montagem no Cliente)
   useEffect(() => {
-    // Mark component as mounted (client-side) so we don't access localStorage during server render
     setMounted(true);
+  }, []);
 
-    const savedUser = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+  // 2. Hook apenas para Autenticação e Redirecionamento
+  useEffect(() => {
+    if (!mounted) return;
+
+    const savedUser = localStorage.getItem("user");
     if (!user && !savedUser) {
-      // Redirect to login page
       router.replace("/login");
     }
-  }, [user, router]);
+  }, [user, router, mounted]);
 
-  // Render nothing until we've mounted on the client to avoid touching localStorage during SSR
+  // 3. Hook apenas para Carregar Dados (Airtable)
+  useEffect(() => {
+    // Só carrega se estiver montado, se tiver user e se a lista estiver vazia
+    const savedUser = localStorage.getItem("user");
+    if (mounted && (user || savedUser) && members.length === 0) {
+      getAllUsers()
+        .then((fetchedMembers) => {
+          setMembers(fetchedMembers);
+        })
+        .catch((err) => console.error("Erro ao carregar membros:", err));
+    }
+  }, [members.length, setMembers, mounted, user]);
+
+  // Bloqueia renderização durante SSR para evitar erros de localStorage
   if (!mounted) return null;
 
-  // If after mount there's still no user, hide content (useEffect will redirect)
-  if (!user && typeof window !== "undefined" && !localStorage.getItem("user")) {
-    return null;
-  }
-
-  if (members.length === 0) {
-    ControloPresencasService.getAllUsers().then(fetchedMembers => {
-      setMembers(fetchedMembers);
-    });
-  }
+  // Proteção visual simples enquanto o redirect não acontece
+  const isAuth = user || localStorage.getItem("user");
+  if (!isAuth) return null;
 
   return <>{children}</>;
 }

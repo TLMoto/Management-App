@@ -1,7 +1,7 @@
 "use client";
 import ProtectedPage from "../components/ProtectedPage";
 import { useEffect, useState } from "react";
-import { EventosService, TurnosService } from "./api/airtable/airtable";
+import { getEventosAtivos, getTurnosAtivosPorPessoa } from "./api/airtable/airtable";
 import { useMembers } from "../components/MemberProvider";
 import Link from "next/link";
 import { useUser } from "../components/UserProvider";
@@ -79,7 +79,7 @@ export default function Home() {
 
     const loadDashboardData = () => {
       setIsLoading(true);
-      EventosService.getEventosAtivos()
+      getEventosAtivos()
         .then(eventos => {
           setEventos(eventos || []);
         })
@@ -93,7 +93,7 @@ export default function Home() {
             setIsLoading(false);
             return;
           }
-          TurnosService.getTurnosAtivosPorPessoa(currentUser.id)
+          getTurnosAtivosPorPessoa(currentUser.id)
             .then(turnos => {
               setMeusTurnos(turnos);
             })

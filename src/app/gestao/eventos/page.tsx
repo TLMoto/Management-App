@@ -1,7 +1,7 @@
 "use client";
 import { Evento, EventoPorCriar } from "@/src/components/Interfaces";
 import React, { useState, useEffect } from "react";
-import { EventosService } from "../../api/airtable/airtable";
+import { getHistoricoEventos, getEventosAtivos, criarEvento } from "../../api/airtable/airtable";
 import { useMembers } from "@/src/components/MemberProvider";
 import ProtectedPage from "@/src/components/ProtectedPage";
 import { useUser } from "@/src/components/UserProvider";
@@ -34,19 +34,19 @@ export default function Eventos() {
     setIsLoading(true);
     // Simulate API call
     setTimeout(async () => {
-      setEventosAtivos(await EventosService.getEventosAtivos());
-      setEventosHistoricos(await EventosService.getHistoricoEventos());
+      setEventosAtivos(await getEventosAtivos());
+      setEventosHistoricos(await getHistoricoEventos());
       setIsLoading(false);
     }, 500);
   };
 
-  const criarEvento = () => {
+  const criarEventoApp = () => {
     const evento: EventoPorCriar = {
       nome,
       dataInicio,
       dataFim,
     };
-    EventosService.criarEvento(evento);
+    criarEvento(evento);
     loadEventos();
     alert("Evento criado com sucesso!");
     setNome("");
@@ -456,7 +456,7 @@ export default function Eventos() {
                     Cancelar
                   </button>
                   <button
-                    onClick={criarEvento}
+                    onClick={criarEventoApp}
                     disabled={!nome || !dataInicio || !dataFim}
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition font-medium"
                   >
