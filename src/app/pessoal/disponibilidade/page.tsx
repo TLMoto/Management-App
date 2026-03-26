@@ -15,10 +15,14 @@ interface AvailabilityData {
   [personId: string]: TimeSlot[];
 }
 
-// parametros do calendario
-const DAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+interface DragStart {
+  day: number;
+  hour: number;
+  minute: number;
+}
 
-const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Segunda a Domingo
+const DAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 const START_HOUR = 8;
 const TIME_SLOTS = Array.from({ length: 32 }, (_, i) => {
@@ -28,53 +32,46 @@ const TIME_SLOTS = Array.from({ length: 32 }, (_, i) => {
   return { hour, minute };
 });
 
-// ID dos crabfits
 const CRAB_EVENTS = {
   presencial: "tlmotopresencial-669665",
 };
 
 export default function Disponibilidade() {
   const [availability, setAvailability] = useState<AvailabilityData>({});
-  const [dragStart, setDragStart] = useState<{ day: number; hour: number; minute: number } | null>(
-    null
-  );
+  const [dragStart, setDragStart] = useState<DragStart | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
-  const isMouseDown = useRef(false);
   const [isSelectingMode, setIsSelectingMode] = useState<boolean | null>(null);
+
+  const isPointerDown = useRef(false);
+  const lastTouchedCellRef = useRef<string | null>(null);
 
   const { user } = useUser();
   const selectedPerson = user ? `user-${user.istId}` : "";
 
-  // Auto login when component mounts and user exists
   useEffect(() => {
-    // Convert CrabFit availability format to local TimeSlot format
     const loadAvailabilityFromCrabFit = (crabAvailability: string[]) => {
       const timeSlots: TimeSlot[] = [];
-      const processedSlots = new Set<string>(); // Para evitar duplicados
+      const processedSlots = new Set<string>();
 
       crabAvailability.forEach(slot => {
-        // Format: "HHMM-D" (e.g., "0800-1" for Monday 08:00)
         const match = slot.match(/^(\d{2})(\d{2})-(\d+)$/);
-        if (match) {
-          const hour = parseInt(match[1]);
-          const minute = parseInt(match[2]);
-          const day = parseInt(match[3]);
-          
-          // Converter slots de 15 minutos do CrabFit para slots de 30 minutos nossos
-          // Só processar slots que começam em :00 ou :30 (ignorar :15 e :45)
-          if (minute % 30 === 0) {
-            const slotKey = `${day}-${hour}-${minute}`;
-            if (!processedSlots.has(slotKey)) {
-              timeSlots.push({ day, hour, minute });
-              processedSlots.add(slotKey);
-            }
+        if (!match) return;
+
+        const hour = parseInt(match[1]);
+        const minute = parseInt(match[2]);
+        const day = parseInt(match[3]);
+
+        if (minute % 30 === 0) {
+          const slotKey = `${day}-${hour}-${minute}`;
+          if (!processedSlots.has(slotKey)) {
+            timeSlots.push({ day, hour, minute });
+            processedSlots.add(slotKey);
           }
         }
       });
 
-      if (timeSlots.length > 0 && selectedPerson) {
+      if (selectedPerson) {
         setAvailability(prev => ({
           ...prev,
           [selectedPerson]: timeSlots,
@@ -82,7 +79,6 @@ export default function Disponibilidade() {
       }
     };
 
-    // Auto login function
     const autoLoginUser = async () => {
       if (!user) return;
 
@@ -92,7 +88,6 @@ export default function Disponibilidade() {
         const result = await loginOrCreatePerson(CRAB_EVENTS.presencial, user.istId.toString());
         setIsLoggedIn(true);
 
-        // Load existing availability from CrabFit
         if (result.availability && result.availability.length > 0) {
           loadAvailabilityFromCrabFit(result.availability);
         }
@@ -110,62 +105,6 @@ export default function Disponibilidade() {
     }
   }, [isLoggedIn, selectedPerson, user]);
 
-  // Sync availability to CrabFit
-  const syncAvailability = async () => {
-    if (!user || !isLoggedIn || !selectedPerson) return;
-
-    const personSlots = availability[selectedPerson] || [];
-
-    // Convert local slots to CrabFit format
-    // Como o CrabFit usa slots de 15 minutos e nós usamos 30 minutos,
-    // cada slot nosso deve gerar 2 slots no CrabFit
-    const crabAvailability: string[] = [];
-    
-    personSlots.forEach(slot => {
-      const hourStr = slot.hour.toString().padStart(2, "0");
-      const minuteStr = slot.minute.toString().padStart(2, "0");
-      
-      // Primeiro slot de 15 minutos (ex: 08:00)
-      crabAvailability.push(`${hourStr}${minuteStr}-${slot.day}`);
-      
-      // Segundo slot de 15 minutos (ex: 08:15)
-      const secondSlotMinute = slot.minute + 15;
-      let secondSlotHour = slot.hour;
-      
-      // Se os minutos passarem de 59, ajustar a hora
-      if (secondSlotMinute >= 60) {
-        secondSlotHour = (slot.hour + 1) % 24;
-      }
-      
-      const secondHourStr = secondSlotHour.toString().padStart(2, "0");
-      const secondMinuteStr = (secondSlotMinute % 60).toString().padStart(2, "0");
-      
-      crabAvailability.push(`${secondHourStr}${secondMinuteStr}-${slot.day}`);
-    });
-
-    try {
-      await updateAvailability(CRAB_EVENTS.presencial, user.istId.toString(), crabAvailability);
-      console.log("Disponibilidade sincronizada automaticamente");
-    } catch (error) {
-      console.error("Erro na sincronização automática:", error);
-    }
-  };
-
-  // Manual sync function
-  const manualSync = async () => {
-    if (!user || !isLoggedIn || !selectedPerson) return;
-
-    const personSlots = availability[selectedPerson] || [];
-
-    try {
-      await syncAvailability();
-      console.log("Sincronização manual OK");
-    } catch (error) {
-      console.error("Erro na sincronização:", error);
-    }
-  };
-
-  // Load data from localStorage
   useEffect(() => {
     const saved = localStorage.getItem("tlcrab-availability");
     if (saved) {
@@ -177,38 +116,9 @@ export default function Disponibilidade() {
     }
   }, []);
 
-  // Save data to localStorage
   useEffect(() => {
     localStorage.setItem("tlcrab-availability", JSON.stringify(availability));
   }, [availability]);
-
-  const toggleTimeSlot = useCallback(
-    (day: number, hour: number, minute: number) => {
-      if (!selectedPerson) return;
-
-      setAvailability(prev => {
-        const personSlots = prev[selectedPerson] || [];
-        const existingIndex = personSlots.findIndex(
-          slot => slot.day === day && slot.hour === hour && slot.minute === minute
-        );
-
-        if (existingIndex !== -1) {
-          return {
-            ...prev,
-            [selectedPerson]: personSlots.filter(
-              slot => !(slot.day === day && slot.hour === hour && slot.minute === minute)
-            ),
-          };
-        } else {
-          return {
-            ...prev,
-            [selectedPerson]: [...personSlots, { day, hour, minute }],
-          };
-        }
-      });
-    },
-    [selectedPerson]
-  );
 
   const isSlotSelected = useCallback(
     (day: number, hour: number, minute: number) => {
@@ -221,52 +131,45 @@ export default function Disponibilidade() {
     [availability, selectedPerson]
   );
 
-  const handleMouseDown = useCallback(
-    (day: number, hour: number, minute: number) => {
-      if (!selectedPerson) return;
+  const applySelectionRange = useCallback(
+    (
+      start: DragStart,
+      end: DragStart,
+      shouldSelect: boolean,
+      personId: string
+    ) => {
+      const startDay = Math.min(start.day, end.day);
+      const endDay = Math.max(start.day, end.day);
 
-      const currentlySelected = isSlotSelected(day, hour, minute);
-      setIsSelectingMode(!currentlySelected);
-      isMouseDown.current = true;
-      setDragStart({ day, hour, minute });
-
-      toggleTimeSlot(day, hour, minute);
-    },
-    [isSlotSelected, selectedPerson, toggleTimeSlot]
-  );
-
-  const handleMouseUp = useCallback(() => {
-    isMouseDown.current = false;
-    setDragStart(null);
-    setIsSelectingMode(null);
-  }, []);
-
-  const handleMouseEnter = useCallback(
-    (day: number, hour: number, minute: number) => {
-      if (!isMouseDown.current || !selectedPerson || !dragStart || isSelectingMode === null) return;
-
-      const startDay = Math.min(dragStart.day, day);
-      const endDay = Math.max(dragStart.day, day);
       const startSlotIndex = TIME_SLOTS.findIndex(
-        slot => slot.hour === dragStart.hour && slot.minute === dragStart.minute
+        slot => slot.hour === start.hour && slot.minute === start.minute
       );
       const endSlotIndex = TIME_SLOTS.findIndex(
-        slot => slot.hour === hour && slot.minute === minute
+        slot => slot.hour === end.hour && slot.minute === end.minute
       );
+
+      if (startSlotIndex === -1 || endSlotIndex === -1) return;
+
       const startSlot = Math.min(startSlotIndex, endSlotIndex);
       const endSlot = Math.max(startSlotIndex, endSlotIndex);
 
       const newSlots: TimeSlot[] = [];
       for (let d = startDay; d <= endDay; d++) {
         for (let s = startSlot; s <= endSlot; s++) {
-          newSlots.push({ day: d, hour: TIME_SLOTS[s].hour, minute: TIME_SLOTS[s].minute });
+          newSlots.push({
+            day: d,
+            hour: TIME_SLOTS[s].hour,
+            minute: TIME_SLOTS[s].minute,
+          });
         }
       }
 
       setAvailability(prev => {
-        const personSlots = prev[selectedPerson] || [];
-        if (isSelectingMode) {
+        const personSlots = prev[personId] || [];
+
+        if (shouldSelect) {
           const merged = [...personSlots];
+
           for (const slot of newSlots) {
             if (
               !merged.some(
@@ -276,28 +179,151 @@ export default function Disponibilidade() {
               merged.push(slot);
             }
           }
-          return { ...prev, [selectedPerson]: merged };
-        } else {
+
           return {
             ...prev,
-            [selectedPerson]: personSlots.filter(
-              s =>
-                !newSlots.some(
-                  slot => slot.day === s.day && slot.hour === s.hour && s.minute === slot.minute
-                )
-            ),
+            [personId]: merged,
           };
         }
+
+        return {
+          ...prev,
+          [personId]: personSlots.filter(
+            s =>
+              !newSlots.some(
+                slot => slot.day === s.day && slot.hour === s.hour && slot.minute === s.minute
+              )
+          ),
+        };
       });
     },
-    [selectedPerson, dragStart, isSelectingMode]
+    []
   );
+
+  const handlePointerDown = useCallback(
+    (
+      event: React.PointerEvent<HTMLDivElement>,
+      day: number,
+      hour: number,
+      minute: number
+    ) => {
+      if (!selectedPerson || !isLoggedIn) return;
+
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+
+      const currentlySelected = isSlotSelected(day, hour, minute);
+      const shouldSelect = !currentlySelected;
+
+      isPointerDown.current = true;
+      setIsSelectingMode(shouldSelect);
+
+      const start = { day, hour, minute };
+      setDragStart(start);
+
+      const cellKey = `${day}-${hour}-${minute}`;
+      lastTouchedCellRef.current = cellKey;
+
+      applySelectionRange(start, start, shouldSelect, selectedPerson);
+    },
+    [applySelectionRange, isLoggedIn, isSlotSelected, selectedPerson]
+  );
+
+  const handlePointerUp = useCallback(() => {
+    isPointerDown.current = false;
+    setDragStart(null);
+    setIsSelectingMode(null);
+    lastTouchedCellRef.current = null;
+  }, []);
+
+  const handlePointerMove = useCallback(
+    (event: React.PointerEvent<HTMLTableSectionElement>) => {
+      if (
+        !isPointerDown.current ||
+        !selectedPerson ||
+        !dragStart ||
+        isSelectingMode === null ||
+        !isLoggedIn
+      ) {
+        return;
+      }
+
+      const element = document.elementFromPoint(event.clientX, event.clientY);
+      if (!element) return;
+
+      const cell = (element as HTMLElement).closest("[data-slot='true']") as HTMLElement | null;
+      if (!cell) return;
+
+      const dayAttr = cell.dataset.day;
+      const hourAttr = cell.dataset.hour;
+      const minuteAttr = cell.dataset.minute;
+
+      if (!dayAttr || !hourAttr || !minuteAttr) return;
+
+      const day = parseInt(dayAttr, 10);
+      const hour = parseInt(hourAttr, 10);
+      const minute = parseInt(minuteAttr, 10);
+
+      const cellKey = `${day}-${hour}-${minute}`;
+
+      if (lastTouchedCellRef.current === cellKey) return;
+      lastTouchedCellRef.current = cellKey;
+
+      applySelectionRange(dragStart, { day, hour, minute }, isSelectingMode, selectedPerson);
+    },
+    [applySelectionRange, dragStart, isLoggedIn, isSelectingMode, selectedPerson]
+  );
+
+  const syncAvailability = async () => {
+    if (!user || !isLoggedIn || !selectedPerson) return;
+
+    const personSlots = availability[selectedPerson] || [];
+    const crabAvailability: string[] = [];
+
+    personSlots.forEach(slot => {
+      const hourStr = slot.hour.toString().padStart(2, "0");
+      const minuteStr = slot.minute.toString().padStart(2, "0");
+
+      crabAvailability.push(`${hourStr}${minuteStr}-${slot.day}`);
+
+      const secondSlotMinute = slot.minute + 15;
+      let secondSlotHour = slot.hour;
+
+      if (secondSlotMinute >= 60) {
+        secondSlotHour = (slot.hour + 1) % 24;
+      }
+
+      const secondHourStr = secondSlotHour.toString().padStart(2, "0");
+      const secondMinuteStr = (secondSlotMinute % 60).toString().padStart(2, "0");
+
+      crabAvailability.push(`${secondHourStr}${secondMinuteStr}-${slot.day}`);
+    });
+
+    try {
+      await updateAvailability(CRAB_EVENTS.presencial, user.istId.toString(), crabAvailability);
+      console.log("Disponibilidade sincronizada automaticamente");
+    } catch (error) {
+      console.error("Erro na sincronização automática:", error);
+      throw error;
+    }
+  };
+
+  const manualSync = async () => {
+    if (!user || !isLoggedIn || !selectedPerson) return;
+
+    try {
+      await syncAvailability();
+      console.log("Sincronização manual OK");
+    } catch (error) {
+      console.error("Erro na sincronização:", error);
+    }
+  };
 
   const getPersonStats = (personId: string) => {
     const slots = availability[personId] || [];
     return {
       totalHours: Math.round(slots.length * 0.5 * 10) / 10,
-      weekPercentage: Math.round((slots.length / (7 * 48)) * 100),
+      weekPercentage: Math.round((slots.length / (7 * TIME_SLOTS.length)) * 100),
     };
   };
 
@@ -321,7 +347,12 @@ export default function Disponibilidade() {
           Minha Disponibilidade
         </h1>
 
-        {/* Calendário */}
+        {isLoading && (
+          <div className="mb-4 rounded-md bg-blue-50 border border-blue-200 px-4 py-3 text-blue-700">
+            A carregar disponibilidade...
+          </div>
+        )}
+
         <div className="bg-white rounded-lg shadow mb-8 overflow-x-auto">
           <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
             <h2 className="text-lg font-semibold text-gray-900">Disponibilidade</h2>
@@ -345,7 +376,7 @@ export default function Disponibilidade() {
                     Hora
                   </th>
 
-                  {WEEK_ORDER.map((dayIndex) => (
+                  {WEEK_ORDER.map(dayIndex => (
                     <th
                       key={dayIndex}
                       className="w-20 sm:w-24 md:w-28 px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
@@ -361,29 +392,29 @@ export default function Disponibilidade() {
                 className={`bg-white divide-y divide-gray-200 select-none ${
                   !isLoggedIn ? "opacity-50 pointer-events-none" : ""
                 }`}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerLeave={handlePointerUp}
               >
                 {TIME_SLOTS.map((timeSlot, slotIndex) => (
                   <tr key={slotIndex}>
-                    <td className="px-4 z-9  whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white border-r">
-                      {/** Show start time - end time (end = next TIME_SLOTS index, wrapped) */}
+                    <td className="px-4 whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white border-r">
                       {timeSlot.hour.toString().padStart(2, "0")}:
                       {timeSlot.minute.toString().padStart(2, "0")}-
                       {(() => {
-                        // Determine next slot (30 minutes later). Use next index if available, otherwise compute wrap-around.
                         const nextIndex = slotIndex + 1;
                         let endHour: number;
                         let endMinute: number;
+
                         if (nextIndex < TIME_SLOTS.length) {
                           endHour = TIME_SLOTS[nextIndex].hour;
                           endMinute = TIME_SLOTS[nextIndex].minute;
                         } else {
-                          // wrap to next day
                           const totalMinutes = timeSlot.hour * 60 + timeSlot.minute + 30;
                           endHour = Math.floor(totalMinutes / 60) % 24;
                           endMinute = totalMinutes % 60;
                         }
+
                         return (
                           <>
                             {endHour.toString().padStart(2, "0")}:
@@ -393,34 +424,35 @@ export default function Disponibilidade() {
                       })()}
                     </td>
 
-                    {WEEK_ORDER.map((dayIndex) => {
+                    {WEEK_ORDER.map(dayIndex => {
                       const isSelected = isSlotSelected(dayIndex, timeSlot.hour, timeSlot.minute);
 
                       return (
                         <td key={dayIndex} className="w-20 sm:w-24 md:w-28 px-1 py-1">
                           <div
+                            data-slot="true"
+                            data-day={dayIndex}
+                            data-hour={timeSlot.hour}
+                            data-minute={timeSlot.minute}
                             className={`
-                              h-8 sm:h-10 w-full cursor-pointer border border-gray-200 transition-all duration-200 rounded
-                              ${isSelected ? "ring-1 sm:ring-2 ring-blue-500 bg-blue-100" : "bg-gray-50 hover:bg-gray-100"}
-                              ${!selectedPerson || !isLoggedIn ? "cursor-not-allowed opacity-50" : ""}
-                              flex items-center justify-center relative group touch-manipulation
-                            `}
-                            onMouseDown={() =>
-                              isLoggedIn &&
-                              handleMouseDown(dayIndex, timeSlot.hour, timeSlot.minute)
-                            }
-                            onMouseEnter={() =>
-                              isLoggedIn &&
-                              handleMouseEnter(dayIndex, timeSlot.hour, timeSlot.minute)
-                            }
-                            onTouchStart={() => {
-                              if (isLoggedIn) {
-                                handleMouseDown(dayIndex, timeSlot.hour, timeSlot.minute);
+                              h-8 sm:h-10 w-full border border-gray-200 transition-all duration-150 rounded
+                              ${
+                                isSelected
+                                  ? "ring-1 sm:ring-2 ring-blue-500 bg-blue-100"
+                                  : "bg-gray-50 hover:bg-gray-100"
                               }
-                            }}
-                            onTouchEnd={handleMouseUp}
+                              ${
+                                !selectedPerson || !isLoggedIn
+                                  ? "cursor-not-allowed opacity-50"
+                                  : "cursor-pointer"
+                              }
+                              flex items-center justify-center touch-manipulation
+                            `}
+                            onPointerDown={event =>
+                              handlePointerDown(event, dayIndex, timeSlot.hour, timeSlot.minute)
+                            }
                             style={{ touchAction: "none" }}
-                          ></div>
+                          />
                         </td>
                       );
                     })}
@@ -431,7 +463,6 @@ export default function Disponibilidade() {
           </div>
         </div>
 
-        {/* Estatísticas */}
         {selectedPerson && user && isLoggedIn && (
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Estatísticas de {user.nome}</h3>
