@@ -20,6 +20,14 @@ import {
   CartesianGrid,
 } from "recharts";
 
+const normalizeSearch = (text: string) =>
+  text
+    .trim()
+    .replace(/\s+/g, " ")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+
 const generateColor = (index: number, total: number) => {
   const hue = (index * 360) / total;
   const saturation = 65;
@@ -122,12 +130,13 @@ const StatisticsPage = () => {
       eventosFiltrados = eventos.filter(evento => eventIdsInRange.has(evento.id));
     }
 
-    if (eventoSearchTerm.trim()) {
-      const lowerSearch = eventoSearchTerm.toLowerCase();
+    if (normalizeSearch(eventoSearchTerm)) {
+      const normalizedSearch = normalizeSearch(eventoSearchTerm);
       eventosFiltrados = eventosFiltrados.filter(evento =>
-        evento.nome.toLowerCase().includes(lowerSearch)
+        normalizeSearch(evento.nome).includes(normalizedSearch)
       );
     }
+
 
     return eventosFiltrados;
   }, [eventos, turnos, calculateDateRange, eventoSearchTerm]);
@@ -271,20 +280,26 @@ const StatisticsPage = () => {
   };
 
   const filteredDepartments = useMemo(() => {
-    if (!departamentoSearchTerm.trim()) {
+    if (!normalizeSearch(departamentoSearchTerm)) {
       return membersByAreaArray.map(d => d.area);
     }
 
-    const lower = departamentoSearchTerm.toLowerCase();
-    return membersByAreaArray.map(d => d.area).filter(dept => dept.toLowerCase().includes(lower));
+    const normalizedSearch = normalizeSearch(departamentoSearchTerm);
+    return membersByAreaArray
+      .map(d => d.area)
+      .filter(dept => normalizeSearch(dept).includes(normalizedSearch));
+
   }, [membersByAreaArray, departamentoSearchTerm]);
 
   const filteredMembers = useMemo(() => {
-    if (!participanteSearchTerm.trim()) {
+    if (!normalizeSearch(participanteSearchTerm)) {
       return members;
     }
-    const lowerSearch = participanteSearchTerm.toLowerCase();
-    return members.filter(member => member.nome.toLowerCase().includes(lowerSearch));
+
+    const normalizedSearch = normalizeSearch(participanteSearchTerm);
+    return members.filter(member =>
+      normalizeSearch(member.nome).includes(normalizedSearch)
+    );
   }, [members, participanteSearchTerm]);
 
   const hasActiveFilters =

@@ -14,20 +14,27 @@ export default function Membros(): JSX.Element {
   const [selectedArea, setSelectedArea] = useState<string>("all");
 
   // Helper function to normalize text (remove accents)
-  const normalizeText = (text: string): string => {
+  const normalizeSearch = (text: string): string => {
     return text
+      .trim()
+      .replace(/\s+/g, " ")
       .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\p{Diacritic}/gu, "")
       .toLowerCase();
   };
+
 
   // Filter members and group by area
   const filteredData = useMemo(() => {
     const filtered = members.filter(member => {
+      const normalizedFilterNome = normalizeSearch(filterNome);
+      const normalizedFilterFuncao = normalizeSearch(filterFuncao);
       const matchesNome =
-        filterNome === "" || normalizeText(member.nome).includes(normalizeText(filterNome));
+        normalizedFilterNome === "" ||
+        normalizeSearch(member.nome).includes(normalizedFilterNome);
       const matchesFuncao =
-        filterFuncao === "" || normalizeText(member.funcao).includes(normalizeText(filterFuncao));
+        normalizedFilterFuncao === "" ||
+        normalizeSearch(member.funcao).includes(normalizedFilterFuncao);
       const matchesArea = selectedArea === "all" || member.department === selectedArea;
       return matchesNome && matchesFuncao && matchesArea;
     });
