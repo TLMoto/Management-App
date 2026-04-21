@@ -316,12 +316,6 @@ export default function Home() {
             <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold text-gray-900">Meus Próximos Turnos</h2>
-                <Link
-                  href="/gestao/turnos"
-                  className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-                >
-                  Ver todos →
-                </Link>
               </div>
               <div className="space-y-3">
                 {[...meusTurnos]
