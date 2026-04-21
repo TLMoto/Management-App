@@ -22,7 +22,7 @@ const Navbar = () => {
   // Filter navigation based on user role
   const filteredNavigation = isLider 
     ? navigation 
-    : navigation.filter(item => item.href === "/pessoal");
+    : navigation.filter(item => item.href === "/pessoal" || item.href === "/calendario");
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 

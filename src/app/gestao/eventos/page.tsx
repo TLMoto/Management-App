@@ -15,6 +15,15 @@ const normalizeSearch = (text: string) =>
     .toLowerCase();
 
 
+const normalizeSearch = (text: string) =>
+  text
+    .trim()
+    .replace(/\s+/g, " ")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+
+
 export default function Eventos() {
   const [activeTab, setActiveTab] = useState<"active" | "historical">("active");
   const [nome, setNome] = useState("");
@@ -51,7 +60,13 @@ export default function Eventos() {
 
   const datasInvalidas = dataInicio !== "" && dataFim !== "" && new Date(dataInicio) > new Date(dataFim);
 
+  const datasInvalidas = dataInicio !== "" && dataFim !== "" && new Date(dataInicio) > new Date(dataFim);
+
   const criarEventoApp = () => {
+    if(datasInvalidas){
+      alert("A data de início não pode ser posterior a data de fim");
+      return;
+    }
     if(datasInvalidas){
       alert("A data de início não pode ser posterior a data de fim");
       return;
@@ -98,11 +113,21 @@ export default function Eventos() {
     const matchesNome =
       searchNomeAtivo === "" || normalizeSearch(evento.nome).includes(searchNomeAtivo);
 
+
+    const searchNomeAtivo = normalizeSearch(filterNomeAtivo);
+    const searchParticipanteAtivo = normalizeSearch(filterParticipanteAtivo);
+
+    const matchesNome =
+      searchNomeAtivo === "" || normalizeSearch(evento.nome).includes(searchNomeAtivo);
+
     const matchesParticipante =
+      searchParticipanteAtivo === "" ||
       searchParticipanteAtivo === "" ||
       participantNames.some(name =>
         normalizeSearch(name).includes(searchParticipanteAtivo)
+        normalizeSearch(name).includes(searchParticipanteAtivo)
       );
+
 
     return matchesNome && matchesParticipante;
   });
@@ -116,14 +141,25 @@ export default function Eventos() {
     const matchesNome =
       searchNomeHistorico === "" || normalizeSearch(evento.nome).includes(searchNomeHistorico);
 
+
+    const searchNomeHistorico = normalizeSearch(filterNomeHistorico);
+    const searchParticipanteHistorico = normalizeSearch(filterParticipanteHistorico);
+
+    const matchesNome =
+      searchNomeHistorico === "" || normalizeSearch(evento.nome).includes(searchNomeHistorico);
+
     const matchesParticipante =
+      searchParticipanteHistorico === "" ||
       searchParticipanteHistorico === "" ||
       participantNames.some(name =>
         normalizeSearch(name).includes(searchParticipanteHistorico)
+        normalizeSearch(name).includes(searchParticipanteHistorico)
       );
+
 
     return matchesNome && matchesParticipante;
   });
+
 
 
   const EventsTable = ({ eventos, isHistorical }: { eventos: Evento[]; isHistorical: boolean }) => (
