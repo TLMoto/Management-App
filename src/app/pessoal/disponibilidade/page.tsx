@@ -4,7 +4,6 @@ import ProtectedPage from "@/src/components/ProtectedPage";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { loginOrCreatePerson, updateAvailability } from "../../api/crab/api";
 import { useUser } from "@/src/components/UserProvider";
-
 interface TimeSlot {
   day: number;
   hour: number;
@@ -132,12 +131,7 @@ export default function Disponibilidade() {
   );
 
   const applySelectionRange = useCallback(
-    (
-      start: DragStart,
-      end: DragStart,
-      shouldSelect: boolean,
-      personId: string
-    ) => {
+    (start: DragStart, end: DragStart, shouldSelect: boolean, personId: string) => {
       const startDay = Math.min(start.day, end.day);
       const endDay = Math.max(start.day, end.day);
 
@@ -201,12 +195,7 @@ export default function Disponibilidade() {
   );
 
   const handlePointerDown = useCallback(
-    (
-      event: React.PointerEvent<HTMLDivElement>,
-      day: number,
-      hour: number,
-      minute: number
-    ) => {
+    (event: React.PointerEvent<HTMLDivElement>, day: number, hour: number, minute: number) => {
       if (!selectedPerson || !isLoggedIn) return;
 
       event.preventDefault();

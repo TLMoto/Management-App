@@ -14,7 +14,6 @@ const normalizeSearch = (text: string) =>
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase();
 
-
 export default function Eventos() {
   const [activeTab, setActiveTab] = useState<"active" | "historical">("active");
   const [nome, setNome] = useState("");
@@ -49,10 +48,11 @@ export default function Eventos() {
     }, 500);
   };
 
-  const datasInvalidas = dataInicio !== "" && dataFim !== "" && new Date(dataInicio) > new Date(dataFim);
+  const datasInvalidas =
+    dataInicio !== "" && dataFim !== "" && new Date(dataInicio) > new Date(dataFim);
 
   const criarEventoApp = () => {
-    if(datasInvalidas){
+    if (datasInvalidas) {
       alert("A data de início não pode ser posterior a data de fim");
       return;
     }
@@ -100,9 +100,7 @@ export default function Eventos() {
 
     const matchesParticipante =
       searchParticipanteAtivo === "" ||
-      participantNames.some(name =>
-        normalizeSearch(name).includes(searchParticipanteAtivo)
-      );
+      participantNames.some(name => normalizeSearch(name).includes(searchParticipanteAtivo));
 
     return matchesNome && matchesParticipante;
   });
@@ -118,14 +116,10 @@ export default function Eventos() {
 
     const matchesParticipante =
       searchParticipanteHistorico === "" ||
-      participantNames.some(name =>
-        normalizeSearch(name).includes(searchParticipanteHistorico)
-      );
+      participantNames.some(name => normalizeSearch(name).includes(searchParticipanteHistorico));
 
     return matchesNome && matchesParticipante;
   });
-
-
 
   const EventsTable = ({ eventos, isHistorical }: { eventos: Evento[]; isHistorical: boolean }) => (
     <>

@@ -36,7 +36,7 @@ export default function Login() {
         <h1 className="text-3xl font-bold text-black">Insere o teu número</h1>
 
         <input
-          className="mt-4 p-2 text-center w-[80%] outline outline-1 outline-blue-600 rounded-lg text-black"
+          className="mt-4 p-2 text-center w-[80%] outline outline-blue-600 rounded-lg text-black"
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => {

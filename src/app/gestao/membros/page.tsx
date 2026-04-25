@@ -23,15 +23,13 @@ export default function Membros(): JSX.Element {
       .toLowerCase();
   };
 
-
   // Filter members and group by area
   const filteredData = useMemo(() => {
     const filtered = members.filter(member => {
       const normalizedFilterNome = normalizeSearch(filterNome);
       const normalizedFilterFuncao = normalizeSearch(filterFuncao);
       const matchesNome =
-        normalizedFilterNome === "" ||
-        normalizeSearch(member.nome).includes(normalizedFilterNome);
+        normalizedFilterNome === "" || normalizeSearch(member.nome).includes(normalizedFilterNome);
       const matchesFuncao =
         normalizedFilterFuncao === "" ||
         normalizeSearch(member.funcao).includes(normalizedFilterFuncao);

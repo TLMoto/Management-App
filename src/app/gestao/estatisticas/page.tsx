@@ -137,7 +137,6 @@ const StatisticsPage = () => {
       );
     }
 
-
     return eventosFiltrados;
   }, [eventos, turnos, calculateDateRange, eventoSearchTerm]);
 
@@ -288,7 +287,6 @@ const StatisticsPage = () => {
     return membersByAreaArray
       .map(d => d.area)
       .filter(dept => normalizeSearch(dept).includes(normalizedSearch));
-
   }, [membersByAreaArray, departamentoSearchTerm]);
 
   const filteredMembers = useMemo(() => {
@@ -297,9 +295,7 @@ const StatisticsPage = () => {
     }
 
     const normalizedSearch = normalizeSearch(participanteSearchTerm);
-    return members.filter(member =>
-      normalizeSearch(member.nome).includes(normalizedSearch)
-    );
+    return members.filter(member => normalizeSearch(member.nome).includes(normalizedSearch));
   }, [members, participanteSearchTerm]);
 
   const hasActiveFilters =

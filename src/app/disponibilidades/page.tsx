@@ -30,8 +30,8 @@ const START_HOUR = 8;
 
 const TIME_SLOTS = Array.from({ length: 32 }, (_, i) => {
   // Calculamos os minutos somando o offset da hora de início (8h * 60min)
-  const totalMinutes = i * 30 + (START_HOUR * 60);
-  
+  const totalMinutes = i * 30 + START_HOUR * 60;
+
   const hour = Math.floor(totalMinutes / 60);
   const minute = totalMinutes % 60;
   return { hour, minute };
@@ -64,7 +64,7 @@ export default function Disponibilidades() {
         const hour = parseInt(match[1]);
         const minute = parseInt(match[2]);
         const day = parseInt(match[3]);
-        
+
         // Converter slots de 15 minutos do CrabFit para slots de 30 minutos nossos
         if (minute % 30 === 0) {
           const slotKey = `${day}-${hour}-${minute}`;
@@ -89,12 +89,12 @@ export default function Disponibilidades() {
   // Get search suggestions
   const getSearchSuggestions = () => {
     if (!searchTerm.trim()) return [];
-    
+
     const searchFilter = normalize(searchTerm.trim());
     return users
-      .filter(person => 
-        normalize(person.name).includes(searchFilter) && 
-        !selectedPersonIds.includes(person.id)
+      .filter(
+        person =>
+          normalize(person.name).includes(searchFilter) && !selectedPersonIds.includes(person.id)
       )
       .slice(0, 10); // Limit to 5 suggestions
   };
@@ -128,9 +128,7 @@ export default function Disponibilidades() {
     // Filter by area
     if (selectedArea !== "") {
       const areaFilter = normalize(selectedArea);
-      filtered = filtered.filter(person => 
-        normalize(person.area || "") === areaFilter
-      );
+      filtered = filtered.filter(person => normalize(person.area || "") === areaFilter);
     }
 
     setFilteredPeople(filtered);
@@ -139,68 +137,66 @@ export default function Disponibilidades() {
   // Load data
   useEffect(() => {
     let mounted = true;
-    
+
     const loadData = async () => {
       try {
         setIsLoading(true);
-        
+
         // Load users from Airtable
         const allUsers = await getAllUsers();
         if (!mounted) return;
-        
-        const mappedUsers: Person[] = allUsers.map(u => ({ 
-          id: u.id, 
-          name: u.nome, 
+
+        const mappedUsers: Person[] = allUsers.map(u => ({
+          id: u.id,
+          name: u.nome,
           area: u.department,
-          istId: u.istId?.toString()
+          istId: u.istId?.toString(),
         }));
-        
+
         setUsers(mappedUsers);
         setFilteredPeople(mappedUsers);
 
         // Load availability for all people from the CRAB event
         try {
           const peopleAvailability = await getPeopleAvailability(CRAB_EVENTS.presencial);
-          
+
           if (!mounted) return;
-          
+
           const availabilityData: AvailabilityData = {};
-          
+
           // Process each person from CRAB API
           peopleAvailability.forEach(person => {
             if (!person.availability || person.availability.length === 0) return;
-            
+
             let matchingUser: Person | undefined;
-            
+
             // 1. Try to match by IST ID (if person.name is a number)
             if (/^\d+$/.test(person.name)) {
               matchingUser = mappedUsers.find(user => user.istId === person.name);
             }
-            
-            // 2. Try to match by Airtable Record ID 
+
+            // 2. Try to match by Airtable Record ID
             if (!matchingUser) {
               matchingUser = mappedUsers.find(user => user.id === person.name);
             }
-            
+
             // 3. Try to match by name (exact match)
             if (!matchingUser) {
               matchingUser = mappedUsers.find(user => user.name === person.name);
             }
-            
+
             if (matchingUser) {
               const convertedSlots = convertCrabFitAvailabilityToTimeSlots(person.availability);
               availabilityData[matchingUser.id] = convertedSlots;
             }
           });
-          
+
           setAvailability(availabilityData);
-          
         } catch (err) {
           if (mounted) {
             setAvailability({});
           }
         }
-        
       } catch (err) {
         // Silent error handling
       } finally {
@@ -211,9 +207,9 @@ export default function Disponibilidades() {
     };
 
     loadData();
-    
-    return () => { 
-      mounted = false; 
+
+    return () => {
+      mounted = false;
     };
   }, []);
 
@@ -267,7 +263,9 @@ export default function Disponibilidades() {
     const peopleAtSlot: string[] = [];
     filteredPeople.forEach(person => {
       const personSlots = availability[person.id] || [];
-      if (personSlots.some(slot => slot.day === day && slot.hour === hour && slot.minute === minute)) {
+      if (
+        personSlots.some(slot => slot.day === day && slot.hour === hour && slot.minute === minute)
+      ) {
         peopleAtSlot.push(person.name);
       }
     });
@@ -278,7 +276,7 @@ export default function Disponibilidades() {
     let totalSlots = 0;
     let availableSlots = 0;
 
-    TIME_SLOTS.forEach((timeSlot) => {
+    TIME_SLOTS.forEach(timeSlot => {
       DAYS.forEach((_, dayIndex) => {
         totalSlots += filteredPeople.length;
         availableSlots += getSlotCount(dayIndex, timeSlot.hour, timeSlot.minute);
@@ -318,7 +316,10 @@ export default function Disponibilidades() {
           {/* Motores de Busca */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div className="bg-white p-4 rounded-lg shadow">
-              <label htmlFor="search-input" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="search-input"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Pesquisar por Nome:
               </label>
               <div className="relative">
@@ -336,7 +337,7 @@ export default function Disponibilidades() {
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm 
                    focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-700"
                 />
-                
+
                 {/* Dropdown de sugestões */}
                 {showSuggestions && suggestions.length > 0 && (
                   <div className="absolute z-50 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto mt-1">
@@ -347,9 +348,7 @@ export default function Disponibilidades() {
                         className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
                       >
                         <div className="font-medium text-gray-900">{person.name}</div>
-                        {person.area && (
-                          <div className="text-sm text-gray-500">{person.area}</div>
-                        )}
+                        {person.area && <div className="text-sm text-gray-500">{person.area}</div>}
                       </div>
                     ))}
                   </div>
@@ -411,14 +410,13 @@ export default function Disponibilidades() {
             </div>
           </div>
 
-          
-
           {/* Calendário Agregado */}
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="p-4 border-b bg-gray-50">
-              <h2 className="text-lg font-semibold text-gray-900">Calendário de Disponibilidades</h2>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Calendário de Disponibilidades
+              </h2>
             </div>
-
 
             <div className="overflow-x-auto">
               <table className="min-w-full table-fixed">
@@ -427,7 +425,7 @@ export default function Disponibilidades() {
                     <th className="w-20 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 z-10 bg-gray-50 border-r border-gray-200">
                       Hora
                     </th>
-                    {WEEK_ORDER.map((dayIndex) => (
+                    {WEEK_ORDER.map(dayIndex => (
                       <th
                         key={dayIndex}
                         className="w-20 sm:w-24 md:w-28 px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
@@ -446,10 +444,18 @@ export default function Disponibilidades() {
                         {timeSlot.minute.toString().padStart(2, "0")}
                       </td>
 
-                      {WEEK_ORDER.map((dayIndex) => {
+                      {WEEK_ORDER.map(dayIndex => {
                         const count = getSlotCount(dayIndex, timeSlot.hour, timeSlot.minute);
-                        const percentage = getSlotPercentage(dayIndex, timeSlot.hour, timeSlot.minute);
-                        const peopleAtSlot = getPeopleAtSlot(dayIndex, timeSlot.hour, timeSlot.minute);
+                        const percentage = getSlotPercentage(
+                          dayIndex,
+                          timeSlot.hour,
+                          timeSlot.minute
+                        );
+                        const peopleAtSlot = getPeopleAtSlot(
+                          dayIndex,
+                          timeSlot.hour,
+                          timeSlot.minute
+                        );
 
                         return (
                           <td key={dayIndex} className="w-20 sm:w-24 md:w-28 px-1 py-1">
@@ -459,17 +465,19 @@ export default function Disponibilidades() {
                                 ${getSlotColor(dayIndex, timeSlot.hour, timeSlot.minute)}
                                 flex items-center justify-center relative group cursor-pointer
                               `}
-                              title={`${count}/${filteredPeople.length} pessoas (${percentage}%)\n${peopleAtSlot.join(', ')}`}
+                              title={`${count}/${filteredPeople.length} pessoas (${percentage}%)\n${peopleAtSlot.join(", ")}`}
                             >
                               <span className="text-xs font-medium text-gray-700">
                                 {count > 0 ? count : ""}
                               </span>
-                              
+
                               {/* Tooltip on hover */}
                               {peopleAtSlot.length > 0 && (
                                 <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity z-20 whitespace-nowrap pointer-events-none">
-                                  <div className="font-semibold">{count}/{filteredPeople.length} pessoas ({percentage}%)</div>
-                                  <div className="mt-1">{peopleAtSlot.join(', ')}</div>
+                                  <div className="font-semibold">
+                                    {count}/{filteredPeople.length} pessoas ({percentage}%)
+                                  </div>
+                                  <div className="mt-1">{peopleAtSlot.join(", ")}</div>
                                 </div>
                               )}
                             </div>
@@ -484,28 +492,28 @@ export default function Disponibilidades() {
           </div>
         </div>
         {/* Estatísticas Gerais */}
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Estatísticas Gerais</h3>
-            {(() => {
-              const stats = getOverallStats();
-              return (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-blue-600">{stats.totalPeople}</p>
-                    <p className="text-sm text-gray-600">Pessoas</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-green-600">{stats.overallPercentage}%</p>
-                    <p className="text-sm text-gray-600">Disponibilidade Média</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-purple-600">{stats.totalHours}h</p>
-                    <p className="text-sm text-gray-600">Horas Totais Disponíveis</p>
-                  </div>
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Estatísticas Gerais</h3>
+          {(() => {
+            const stats = getOverallStats();
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-blue-600">{stats.totalPeople}</p>
+                  <p className="text-sm text-gray-600">Pessoas</p>
                 </div>
-              );
-            })()}
-          </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-green-600">{stats.overallPercentage}%</p>
+                  <p className="text-sm text-gray-600">Disponibilidade Média</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-purple-600">{stats.totalHours}h</p>
+                  <p className="text-sm text-gray-600">Horas Totais Disponíveis</p>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
       </main>
     </ProtectedPage>
   );

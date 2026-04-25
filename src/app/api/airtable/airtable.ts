@@ -1,4 +1,4 @@
-'use server'
+'use server';
 
 import Airtable from 'airtable';
 import {
@@ -17,11 +17,13 @@ const getAirtableBase = () => {
   const baseId = process.env.AIRTABLE_BASE_ID;
 
   if (!apiKey || !baseId) {
-    throw new Error("Erro de Configuração: API_KEY ou AIRTABLE_BASE_ID não encontradas no ambiente.");
+    throw new Error(
+      'Erro de Configuração: API_KEY ou AIRTABLE_BASE_ID não encontradas no ambiente.'
+    );
   }
 
   const options: any = { apiKey };
-  if (process.env.ENDPOINT_URL && process.env.ENDPOINT_URL.trim() !== "") {
+  if (process.env.ENDPOINT_URL && process.env.ENDPOINT_URL.trim() !== '') {
     options.endpointUrl = process.env.ENDPOINT_URL;
   }
 
@@ -41,7 +43,7 @@ export interface TurnoAirtable {
   participantesIds: string[];
   responsavelId: string;
   observacoes?: string;
-  tipo?: "Turno" | "Worksession" | "Reunião";
+  tipo?: 'Turno' | 'Worksession' | 'Reunião';
   isRecurring?: boolean;
   dataLimiteRecorrencia?: string;
 }
@@ -49,7 +51,7 @@ export interface TurnoAirtable {
 // --- HELPERS ---
 
 const extractDateFromISO = (isoString: string): string => {
-  if (!isoString) return "";
+  if (!isoString) return '';
   const dateObj = new Date(isoString);
   const day = dateObj.getDate().toString().padStart(2, '0');
   const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
@@ -58,7 +60,7 @@ const extractDateFromISO = (isoString: string): string => {
 };
 
 const extractTimeFromISO = (isoString: string): string => {
-  if (!isoString) return "";
+  if (!isoString) return '';
   const dateObj = new Date(isoString);
   const hours = dateObj.getHours().toString().padStart(2, '0');
   const minutes = dateObj.getMinutes().toString().padStart(2, '0');
@@ -66,7 +68,7 @@ const extractTimeFromISO = (isoString: string): string => {
 };
 
 const combineDateAndTimeToISO = (dateApp: string, timeApp: string): string => {
-  if (!dateApp || !timeApp) return "";
+  if (!dateApp || !timeApp) return '';
   const [day, month, year] = dateApp.split('/').map(Number);
   const [hours, minutes] = timeApp.split(':').map(Number);
   const dateObj = new Date(year, month - 1, day, hours, minutes);
@@ -139,7 +141,9 @@ export async function getAllUsers(): Promise<User[]> {
 
 export async function getAllDepartments(): Promise<string[]> {
   try {
-    const records = await airtableBase('Controlo de Presenças').select({ fields: ['Área'] }).all();
+    const records = await airtableBase('Controlo de Presenças')
+      .select({ fields: ['Área'] })
+      .all();
     const allValues = records.map(record => record.get('Área'));
     const flatValues = allValues.flat().filter(v => v !== undefined && v !== null);
     const stringSet = new Set(flatValues.map(item => String(item)));
@@ -155,18 +159,20 @@ export async function getAllDepartments(): Promise<string[]> {
 export async function getEventos(): Promise<Evento[]> {
   try {
     const records = await airtableBase('Eventos').select({ view: 'Eventos' }).all();
-    return records.map(record => {
-      const rawData = {
-        id: record.id,
-        nome: record.get('Nome'),
-        participantes: record.get('Participantes'),
-        dataInicio: record.get('Data Início'),
-        dataFim: record.get('Data Fim'),
-        turnos: record.get('Turnos'),
-      };
-      const result = EventoSchema.safeParse(rawData);
-      return result.success ? result.data : null;
-    }).filter((r): r is Evento => r !== null);
+    return records
+      .map(record => {
+        const rawData = {
+          id: record.id,
+          nome: record.get('Nome'),
+          participantes: record.get('Participantes'),
+          dataInicio: record.get('Data Início'),
+          dataFim: record.get('Data Fim'),
+          turnos: record.get('Turnos'),
+        };
+        const result = EventoSchema.safeParse(rawData);
+        return result.success ? result.data : null;
+      })
+      .filter((r): r is Evento => r !== null);
   } catch (error) {
     console.error('Error fetching eventos:', error);
     return [];
@@ -176,18 +182,20 @@ export async function getEventos(): Promise<Evento[]> {
 export async function getHistoricoEventos(): Promise<Evento[]> {
   try {
     const records = await airtableBase('Eventos').select({ view: 'Histórico Eventos' }).all();
-    return records.map(record => {
-      const rawData = {
-        id: record.id,
-        nome: record.get('Nome'),
-        participantes: record.get('Participantes'),
-        dataInicio: record.get('Data Início'),
-        dataFim: record.get('Data Fim'),
-        turnos: record.get('Turnos'),
-      };
-      const result = EventoSchema.safeParse(rawData);
-      return result.success ? result.data : null;
-    }).filter((r): r is Evento => r !== null);
+    return records
+      .map(record => {
+        const rawData = {
+          id: record.id,
+          nome: record.get('Nome'),
+          participantes: record.get('Participantes'),
+          dataInicio: record.get('Data Início'),
+          dataFim: record.get('Data Fim'),
+          turnos: record.get('Turnos'),
+        };
+        const result = EventoSchema.safeParse(rawData);
+        return result.success ? result.data : null;
+      })
+      .filter((r): r is Evento => r !== null);
   } catch (error) {
     console.error('Error fetching historico eventos:', error);
     return [];
@@ -197,32 +205,40 @@ export async function getHistoricoEventos(): Promise<Evento[]> {
 export async function getEventosAtivos(): Promise<Evento[]> {
   try {
     const records = await airtableBase('Eventos').select({ view: 'Eventos Ativos' }).all();
-    return records.map(record => {
-      const rawData = {
-        id: record.id,
-        nome: record.get('Nome'),
-        participantes: record.get('Participantes'),
-        dataInicio: record.get('Data Início'),
-        dataFim: record.get('Data Fim'),
-      };
-      const result = EventoSchema.safeParse(rawData);
-      return result.success ? result.data : null;
-    }).filter((r): r is Evento => r !== null);
+    return records
+      .map(record => {
+        const rawData = {
+          id: record.id,
+          nome: record.get('Nome'),
+          participantes: record.get('Participantes'),
+          dataInicio: record.get('Data Início'),
+          dataFim: record.get('Data Fim'),
+        };
+        const result = EventoSchema.safeParse(rawData);
+        return result.success ? result.data : null;
+      })
+      .filter((r): r is Evento => r !== null);
   } catch (error) {
     console.error('Error fetching eventos ativos:', error);
     return [];
   }
 }
 
-export async function criarEvento(evento: { nome: string; dataInicio: string; dataFim: string }): Promise<void> {
+export async function criarEvento(evento: {
+  nome: string;
+  dataInicio: string;
+  dataFim: string;
+}): Promise<void> {
   try {
-    await airtableBase('Eventos').create([{
-      fields: {
-        'Nome': evento.nome,
-        'Data Início': evento.dataInicio,
-        'Data Fim': evento.dataFim,
+    await airtableBase('Eventos').create([
+      {
+        fields: {
+          Nome: evento.nome,
+          'Data Início': evento.dataInicio,
+          'Data Fim': evento.dataFim,
+        },
       },
-    }]);
+    ]);
   } catch (error) {
     console.error('Error creating evento:', error);
     throw error;
@@ -243,20 +259,22 @@ export async function apagarEvento(eventoId: string): Promise<void> {
 export async function getTurnosAtivos(): Promise<Turno[]> {
   try {
     const records = await airtableBase('Turnos').select({ view: 'Turnos Ativos' }).all();
-    return records.map(record => {
-      const rawEvento = record.get('Evento');
-      const safeEvento = Array.isArray(rawEvento) && rawEvento.length > 0 ? rawEvento[0] : [];
-      const rawData = {
-        id: record.id,
-        idTurno: record.get('ID Turno')?.toString(),
-        participantes: record.get('Participantes'),
-        evento: safeEvento,
-        dataInicio: record.get('Data Início'),
-        dataFim: record.get('Data Fim'),
-      };
-      const result = TurnoSchema.safeParse(rawData);
-      return result.success ? result.data : null;
-    }).filter((r): r is Turno => r !== null);
+    return records
+      .map(record => {
+        const rawEvento = record.get('Evento');
+        const safeEvento = Array.isArray(rawEvento) && rawEvento.length > 0 ? rawEvento[0] : [];
+        const rawData = {
+          id: record.id,
+          idTurno: record.get('ID Turno')?.toString(),
+          participantes: record.get('Participantes'),
+          evento: safeEvento,
+          dataInicio: record.get('Data Início'),
+          dataFim: record.get('Data Fim'),
+        };
+        const result = TurnoSchema.safeParse(rawData);
+        return result.success ? result.data : null;
+      })
+      .filter((r): r is Turno => r !== null);
   } catch (error) {
     console.error('Error fetching turnos ativos:', error);
     return [];
@@ -266,20 +284,22 @@ export async function getTurnosAtivos(): Promise<Turno[]> {
 export async function getHistoricoTurnos(): Promise<Turno[]> {
   try {
     const records = await airtableBase('Turnos').select({ view: 'Histórico Turnos' }).all();
-    return records.map(record => {
-      const rawEvento = record.get('Evento');
-      const safeEvento = Array.isArray(rawEvento) && rawEvento.length > 0 ? rawEvento[0] : [];
-      const rawData = {
-        id: record.id,
-        idTurno: record.get('ID Turno')?.toString(),
-        participantes: record.get('Participantes'),
-        evento: safeEvento,
-        dataInicio: record.get('Data Início'),
-        dataFim: record.get('Data Fim'),
-      };
-      const result = TurnoSchema.safeParse(rawData);
-      return result.success ? result.data : null;
-    }).filter((r): r is Turno => r !== null);
+    return records
+      .map(record => {
+        const rawEvento = record.get('Evento');
+        const safeEvento = Array.isArray(rawEvento) && rawEvento.length > 0 ? rawEvento[0] : [];
+        const rawData = {
+          id: record.id,
+          idTurno: record.get('ID Turno')?.toString(),
+          participantes: record.get('Participantes'),
+          evento: safeEvento,
+          dataInicio: record.get('Data Início'),
+          dataFim: record.get('Data Fim'),
+        };
+        const result = TurnoSchema.safeParse(rawData);
+        return result.success ? result.data : null;
+      })
+      .filter((r): r is Turno => r !== null);
   } catch (error) {
     console.error('Error fetching historico turnos:', error);
     return [];
@@ -294,20 +314,23 @@ export async function getTurnosAtivosPorPessoa(recordID: string): Promise<Turno[
       return Array.isArray(participantes) && participantes.includes(recordID);
     });
 
-    return filteredRecords.map(record => {
-      const rawEvento = record.get('Evento');
-      const safeEvento = Array.isArray(rawEvento) && rawEvento.length > 0 ? rawEvento[0] : 'Sem Evento';
-      const rawData = {
-        id: record.id,
-        idTurno: record.get('ID Turno')?.toString() || 'Sem ID Turno',
-        participantes: record.get('Participantes'),
-        evento: safeEvento,
-        dataInicio: record.get('Data Início'),
-        dataFim: record.get('Data Fim'),
-      };
-      const result = TurnoSchema.safeParse(rawData);
-      return result.success ? result.data : null;
-    }).filter((r): r is Turno => r !== null);
+    return filteredRecords
+      .map(record => {
+        const rawEvento = record.get('Evento');
+        const safeEvento =
+          Array.isArray(rawEvento) && rawEvento.length > 0 ? rawEvento[0] : 'Sem Evento';
+        const rawData = {
+          id: record.id,
+          idTurno: record.get('ID Turno')?.toString() || 'Sem ID Turno',
+          participantes: record.get('Participantes'),
+          evento: safeEvento,
+          dataInicio: record.get('Data Início'),
+          dataFim: record.get('Data Fim'),
+        };
+        const result = TurnoSchema.safeParse(rawData);
+        return result.success ? result.data : null;
+      })
+      .filter((r): r is Turno => r !== null);
   } catch (error) {
     console.error('Error fetching turnos por pessoa:', error);
     return [];
@@ -316,33 +339,35 @@ export async function getTurnosAtivosPorPessoa(recordID: string): Promise<Turno[
 
 export async function getTurnos(): Promise<TurnoAirtable[]> {
   try {
-    const records = await airtableBase('Turnos').select({
-      sort: [{ field: 'Data Início', direction: 'desc' }]
-    }).all();
+    const records = await airtableBase('Turnos')
+      .select({
+        sort: [{ field: 'Data Início', direction: 'desc' }],
+      })
+      .all();
 
     return records.map(record => {
-      const startISO = record.get('Data Início') as string; 
+      const startISO = record.get('Data Início') as string;
       const endISO = record.get('Data Fim') as string;
       const eventoArr = record.get('Evento') as string[] | undefined;
       const responsavelArr = record.get('Responsável') as string[] | undefined;
 
       return {
         id: record.id,
-        nome: record.get('Nome') as string || "",
+        nome: (record.get('Nome') as string) || '',
         data: extractDateFromISO(startISO),
         horaInicio: extractTimeFromISO(startISO),
         horaFim: extractTimeFromISO(endISO),
-        eventoId: eventoArr?.[0] || "",
-        participantesIds: record.get('Participantes') as string[] || [],
-        responsavelId: responsavelArr?.[0] || "",
-        observacoes: record.get('Observações') as string || "",
+        eventoId: eventoArr?.[0] || '',
+        participantesIds: (record.get('Participantes') as string[]) || [],
+        responsavelId: responsavelArr?.[0] || '',
+        observacoes: (record.get('Observações') as string) || '',
         tipo: record.get('Tipo') as any,
         isRecurring: record.get('Recorrente') as boolean,
         dataLimiteRecorrencia: record.get('Data Limite Recorrência') as string,
       };
     });
   } catch (error) {
-    console.error("Erro ao buscar turnos (Gestão):", error);
+    console.error('Erro ao buscar turnos (Gestão):', error);
     return [];
   }
 }
@@ -350,21 +375,21 @@ export async function getTurnos(): Promise<TurnoAirtable[]> {
 export async function criarTurno(payload: Omit<TurnoAirtable, 'id'>): Promise<string> {
   try {
     const fields: any = {
-      'Nome': payload.nome,
+      Nome: payload.nome,
       'Data Início': combineDateAndTimeToISO(payload.data, payload.horaInicio),
       'Data Fim': combineDateAndTimeToISO(payload.data, payload.horaFim),
-      'Evento': [payload.eventoId],
-      'Participantes': payload.participantesIds,
-      'Observações': payload.observacoes || '',
-      'Tipo': payload.tipo,
-      'Recorrente': payload.isRecurring,
-      'Data Limite Recorrência': payload.dataLimiteRecorrencia
+      Evento: [payload.eventoId],
+      Participantes: payload.participantesIds,
+      Observações: payload.observacoes || '',
+      Tipo: payload.tipo,
+      Recorrente: payload.isRecurring,
+      'Data Limite Recorrência': payload.dataLimiteRecorrencia,
     };
 
     if (payload.responsavelId) fields['Responsável'] = [payload.responsavelId];
 
     const records = await airtableBase('Turnos').create([{ fields }]);
-    if (!records || records.length === 0) throw new Error("Falha ao criar registo.");
+    if (!records || records.length === 0) throw new Error('Falha ao criar registo.');
     return records[0].id;
   } catch (error) {
     console.error('Erro ao criar turno (Gestão):', error);
@@ -372,18 +397,21 @@ export async function criarTurno(payload: Omit<TurnoAirtable, 'id'>): Promise<st
   }
 }
 
-export async function editarTurno(idTurno: string, payload: Omit<TurnoAirtable, 'id'>): Promise<void> {
+export async function editarTurno(
+  idTurno: string,
+  payload: Omit<TurnoAirtable, 'id'>
+): Promise<void> {
   try {
     const fields: any = {
-      'Nome': payload.nome,
+      Nome: payload.nome,
       'Data Início': combineDateAndTimeToISO(payload.data, payload.horaInicio),
       'Data Fim': combineDateAndTimeToISO(payload.data, payload.horaFim),
-      'Evento': [payload.eventoId],
-      'Participantes': payload.participantesIds,
-      'Observações': payload.observacoes || '',
-      'Tipo': payload.tipo,
-      'Recorrente': payload.isRecurring,
-      'Data Limite Recorrência': payload.dataLimiteRecorrencia
+      Evento: [payload.eventoId],
+      Participantes: payload.participantesIds,
+      Observações: payload.observacoes || '',
+      Tipo: payload.tipo,
+      Recorrente: payload.isRecurring,
+      'Data Limite Recorrência': payload.dataLimiteRecorrencia,
     };
 
     if (payload.responsavelId) fields['Responsável'] = [payload.responsavelId];

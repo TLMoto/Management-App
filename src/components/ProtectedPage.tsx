@@ -37,10 +37,10 @@ export default function ProtectedPage({ children }: ProtectedPageProps) {
     const savedUser = localStorage.getItem("user");
     if (mounted && (user || savedUser) && members.length === 0) {
       getAllUsers()
-        .then((fetchedMembers) => {
+        .then(fetchedMembers => {
           setMembers(fetchedMembers);
         })
-        .catch((err) => console.error("Erro ao carregar membros:", err));
+        .catch(err => console.error("Erro ao carregar membros:", err));
     }
   }, [members.length, setMembers, mounted, user]);
 

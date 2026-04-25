@@ -25,9 +25,9 @@ export interface PersonAvailabilityResponse {
 }
 
 export interface PeopleAvailabilityResponse {
-    name: string;
-    availability: string[];
-    created_at: number;
+  name: string;
+  availability: string[];
+  created_at: number;
 }
 
 export async function createEvent(eventData: EventInput): Promise<EventResponse> {
@@ -138,8 +138,9 @@ export async function loginOrCreatePerson(
   }
 }
 
-
-export async function getPeopleAvailability(event_id: string): Promise<PeopleAvailabilityResponse[]> {
+export async function getPeopleAvailability(
+  event_id: string
+): Promise<PeopleAvailabilityResponse[]> {
   try {
     const response = await fetch(
       `${API_BASE_URL}?eventId=${encodeURIComponent(event_id)}&action=getPeople`,
@@ -164,4 +165,4 @@ export async function getPeopleAvailability(event_id: string): Promise<PeopleAva
     }
     throw new Error('Erro desconhecido ao obter disponibilidades das pessoas');
   }
-} 
+}

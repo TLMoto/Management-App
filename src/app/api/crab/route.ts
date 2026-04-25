@@ -14,7 +14,6 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(body),
     });
 
-
     if (!response.ok) {
       const errorText = await response.text();
       return NextResponse.json({ error: `API Error: ${errorText}` }, { status: response.status });
@@ -80,8 +79,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(result);
     }
 
-    if(action === 'getPeople' && eventId) {
-      const response = await fetch (`${API_BASE_URL}/event/${eventId}/people`, {
+    if (action === 'getPeople' && eventId) {
+      const response = await fetch(`${API_BASE_URL}/event/${eventId}/people`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
