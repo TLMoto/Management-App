@@ -30,6 +30,7 @@
     "eslint-config-next": "15.5.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",
+    "pwa-asset-generator": "^8.1.4",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
