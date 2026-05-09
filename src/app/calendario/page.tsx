@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import type { JSX } from "react";
-import { useUser } from "@/src/components/UserProvider";
 import ProtectedPage from "@/src/components/ProtectedPage";
 import { getTurnos, getEventos, getAllUsers, TurnoAirtable } from "../api/airtable/airtable";
 import { Evento, User } from "@/src/components/Interfaces";
@@ -37,6 +36,11 @@ interface DiaCalendario {
   turnos: TurnoLocal[];
 }
 
+type VistaCalendario = "mes" | "semana";
+
+const DIAS_SEMANA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+const HOUR_HEIGHT_PX = 64;
+
 // --- HELPERS ---
 const getWeekDayFromDate = (dateStr: string): number => {
   if (!dateStr) return 0;
@@ -50,6 +54,15 @@ const formatDateToDDMMYYYY = (date: Date): string => {
   const month = (date.getMonth() + 1).toString().padStart(2, "0");
   const year = date.getFullYear();
   return `${day}/${month}/${year}`;
+};
+
+const getStartOfWeek = (date: Date): Date => {
+  const start = new Date(date);
+  const dayOfWeek = start.getDay();
+  const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  start.setDate(start.getDate() - daysToSubtract);
+  start.setHours(0, 0, 0, 0);
+  return start;
 };
 
 const parseDateString = (dateStr: string): Date => {
@@ -106,7 +119,6 @@ const generateCalendarDays = (currentDate: Date, turnos: TurnoLocal[]): DiaCalen
   const month = currentDate.getMonth();
 
   const firstDayOfMonth = new Date(year, month, 1);
-  const lastDayOfMonth = new Date(year, month + 1, 0);
 
   const startDate = new Date(firstDayOfMonth);
   const dayOfWeek = firstDayOfMonth.getDay();
@@ -141,6 +153,49 @@ const generateCalendarDays = (currentDate: Date, turnos: TurnoLocal[]): DiaCalen
   return days;
 };
 
+const generateWeekDays = (currentDate: Date, turnos: TurnoLocal[]): DiaCalendario[] => {
+  const startDate = getStartOfWeek(currentDate);
+  const today = new Date();
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const currentDay = new Date(startDate);
+    currentDay.setDate(startDate.getDate() + index);
+
+    const dayTurnos = turnos
+      .filter(turno => {
+        if (!turno.dataCompleta) return false;
+        const turnoDate = parseDateString(turno.dataCompleta);
+        return isSameDay(turnoDate, currentDay);
+      })
+      .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+
+    return {
+      date: currentDay,
+      day: currentDay.getDate(),
+      isCurrentMonth: currentDay.getMonth() === currentDate.getMonth(),
+      isToday: isSameDay(currentDay, today),
+      turnos: dayTurnos,
+    };
+  });
+};
+
+const timeToMinutes = (time?: string): number => {
+  if (!time) return 0;
+  const [hours = 0, minutes = 0] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+};
+
+const getHorarioSemana = (_dias: DiaCalendario[]) => {
+  const inicio = 1;
+  const fim = 23;
+
+  return {
+    inicio,
+    fim,
+    horas: Array.from({ length: fim - inicio + 1 }, (_, i) => i + inicio),
+  };
+}; 
+
 // HELPER DE CORES
 const getCorPorTipo = (tipo?: string, isPassado?: boolean) => {
   if (isPassado) return "bg-gray-400 text-white border-gray-500";
@@ -155,13 +210,12 @@ const getCorPorTipo = (tipo?: string, isPassado?: boolean) => {
 };
 
 export default function Calendario(): JSX.Element {
-  const { user } = useUser();
-
   // --- ESTADOS ---
   const [turnos, setTurnos] = useState<TurnoLocal[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<DiaCalendario | null>(null);
+  const [vista, setVista] = useState<VistaCalendario>("mes");
 
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [airtableUsers, setAirtableUsers] = useState<User[]>([]);
@@ -181,6 +235,12 @@ export default function Calendario(): JSX.Element {
   const calendarDays = useMemo(() => {
     return generateCalendarDays(currentMonth, turnos);
   }, [currentMonth, turnos]);
+
+  const weekDays = useMemo(() => {
+    return generateWeekDays(currentMonth, turnos);
+  }, [currentMonth, turnos]);
+
+  const horarioSemana = useMemo(() => getHorarioSemana(weekDays), [weekDays]);
 
   useEffect(() => {
     loadTurnos();
@@ -228,10 +288,29 @@ export default function Calendario(): JSX.Element {
 
   // --- NAVIGATION ---
   const goToPreviousMonth = () =>
-    setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    setCurrentMonth(prev => {
+      if (vista === "semana") {
+        const nextDate = new Date(prev);
+        nextDate.setDate(prev.getDate() - 7);
+        return nextDate;
+      }
+      return new Date(prev.getFullYear(), prev.getMonth() - 1, 1);
+    });
   const goToNextMonth = () =>
-    setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    setCurrentMonth(prev => {
+      if (vista === "semana") {
+        const nextDate = new Date(prev);
+        nextDate.setDate(prev.getDate() + 7);
+        return nextDate;
+      }
+      return new Date(prev.getFullYear(), prev.getMonth() + 1, 1);
+    });
   const goToToday = () => setCurrentMonth(new Date());
+
+  const tituloCalendario =
+    vista === "semana"
+      ? `Vista Semanal`
+      : `${MESES[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`;
 
   return (
     <ProtectedPage>
@@ -252,88 +331,209 @@ export default function Calendario(): JSX.Element {
         <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-8">
           {/* Header */}
           <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <h2 className="text-xl font-bold text-gray-800 capitalize">
-                {MESES[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+                {tituloCalendario}
               </h2>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={goToPreviousMonth}
-                  className="p-2 hover:bg-gray-200 text-gray-600 rounded-lg transition font-bold text-lg"
-                >
-                  ←
-                </button>
-                <button
-                  onClick={goToToday}
-                  className="px-4 py-1 text-sm bg-blue-100 text-blue-700 font-bold rounded hover:bg-blue-200 transition"
-                >
-                  Hoje
-                </button>
-                <button
-                  onClick={goToNextMonth}
-                  className="p-2 hover:bg-gray-200 text-gray-600 rounded-lg transition font-bold text-lg"
-                >
-                  →
-                </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex rounded-lg border border-gray-200 bg-white p-1">
+                  <button
+                    onClick={() => setVista("mes")}
+                    className={`px-3 py-1.5 text-sm font-bold rounded-md transition ${
+                      vista === "mes"
+                        ? "bg-blue-100 text-blue-700"
+                        : "text-gray-500 hover:bg-gray-100"
+                    }`}
+                  >
+                    Mês
+                  </button>
+                  <button
+                    onClick={() => setVista("semana")}
+                    className={`px-3 py-1.5 text-sm font-bold rounded-md transition ${
+                      vista === "semana"
+                        ? "bg-blue-100 text-blue-700"
+                        : "text-gray-500 hover:bg-gray-100"
+                    }`}
+                  >
+                    Semana
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={goToPreviousMonth}
+                    className="p-2 hover:bg-gray-200 text-gray-600 rounded-lg transition font-bold text-lg"
+                    aria-label={vista === "semana" ? "Semana anterior" : "Mês anterior"}
+                  >
+                    ←
+                  </button>
+                  <button
+                    onClick={goToToday}
+                    className="px-4 py-1 text-sm bg-blue-100 text-blue-700 font-bold rounded hover:bg-blue-200 transition"
+                  >
+                    Hoje
+                  </button>
+                  <button
+                    onClick={goToNextMonth}
+                    className="p-2 hover:bg-gray-200 text-gray-600 rounded-lg transition font-bold text-lg"
+                    aria-label={vista === "semana" ? "Semana seguinte" : "Mês seguinte"}
+                  >
+                    →
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Days Header */}
-          <div className="grid grid-cols-7 bg-white border-b border-gray-200">
-            {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map(day => (
-              <div
-                key={day}
-                className="px-3 py-3 text-center text-xs font-bold text-gray-500 uppercase"
-              >
-                {day}
+          {vista === "mes" ? (
+            <>
+              {/* Days Header */}
+              <div className="grid grid-cols-7 bg-white border-b border-gray-200">
+                {DIAS_SEMANA.map(day => (
+                  <div
+                    key={day}
+                    className="px-3 py-3 text-center text-xs font-bold text-gray-500 uppercase"
+                  >
+                    {day}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          {/* Grid */}
-          <div className="grid grid-cols-7">
-            {calendarDays.map((dia, index) => (
-              <div
-                key={index}
-                className={`min-h-[140px] p-2 border-b border-r border-gray-100 cursor-pointer transition 
-                  ${!dia.isCurrentMonth ? "bg-gray-50/50" : "bg-white hover:bg-gray-50"} 
-                  ${dia.isToday ? "ring-2 ring-inset ring-blue-500 bg-blue-50/10" : ""}
-                `}
-                onClick={() => setSelectedDay(dia)}
-              >
-                <div
-                  className={`text-sm font-bold mb-2 ${!dia.isCurrentMonth ? "text-gray-400" : dia.isToday ? "text-blue-600" : "text-gray-700"}`}
-                >
-                  {dia.day}
-                </div>
-
-                <div className="space-y-1.5 overflow-hidden">
-                  {dia.turnos.slice(0, 4).map(turno => {
-                    const isPassado = !isTurnoFuturo(turno);
-                    const corClasses = getCorPorTipo(turno.tipo, isPassado);
-
-                    return (
-                      <div
-                        key={turno.id}
-                        className={`text-[10px] px-1.5 py-1 rounded border leading-tight truncate font-medium ${corClasses} ${turno.isVirtual ? "border-dashed" : ""}`}
-                        title={`${turno.nome || turno.tipo} (${turno.horaInicio}-${turno.horaFim})`}
-                      >
-                        <span className="font-bold mr-1">{turno.horaInicio}</span>
-                        {/* 4. ATUALIZADA: Mostra o Nome em vez do Evento */}
-                        {turno.nome || turno.tipo || "Turno"}
-                      </div>
-                    );
-                  })}
-                  {dia.turnos.length > 4 && (
-                    <div className="text-[10px] text-gray-500 font-bold text-center mt-1">
-                      +{dia.turnos.length - 4} marcações
+              {/* Grid */}
+              <div className="grid grid-cols-7">
+                {calendarDays.map((dia, index) => (
+                  <div
+                    key={index}
+                    className={`min-h-[140px] p-2 border-b border-r border-gray-100 cursor-pointer transition 
+                      ${!dia.isCurrentMonth ? "bg-gray-50/50" : "bg-white hover:bg-gray-50"} 
+                      ${dia.isToday ? "ring-2 ring-inset ring-blue-500 bg-blue-50/10" : ""}
+                    `}
+                    onClick={() => setSelectedDay(dia)}
+                  >
+                    <div
+                      className={`text-sm font-bold mb-2 ${!dia.isCurrentMonth ? "text-gray-400" : dia.isToday ? "text-blue-600" : "text-gray-700"}`}
+                    >
+                      {dia.day}
                     </div>
-                  )}
+
+                    <div className="space-y-1.5 overflow-hidden">
+                      {dia.turnos.slice(0, 4).map(turno => {
+                        const isPassado = !isTurnoFuturo(turno);
+                        const corClasses = getCorPorTipo(turno.tipo, isPassado);
+
+                        return (
+                          <div
+                            key={turno.id}
+                            className={`text-[10px] px-1.5 py-1 rounded border leading-tight truncate font-medium ${corClasses} ${turno.isVirtual ? "border-dashed" : ""}`}
+                            title={`${turno.nome || turno.tipo} (${turno.horaInicio}-${turno.horaFim})`}
+                          >
+                            <span className="font-bold mr-1">{turno.horaInicio}</span>
+                            {turno.nome || turno.tipo || "Turno"}
+                          </div>
+                        );
+                      })}
+                      {dia.turnos.length > 4 && (
+                        <div className="text-[10px] text-gray-500 font-bold text-center mt-1">
+                          +{dia.turnos.length - 4} marcações
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="overflow-x-hidden bg-white">
+              <div className="w-full min-w-0 md:min-w-[900px]">
+                <div className="grid grid-cols-[42px_repeat(7,minmax(0,1fr))] md:grid-cols-[72px_repeat(7,minmax(110px,1fr))] border-b border-gray-200">
+                  <div className="bg-gray-50 border-r border-gray-200" />
+                  {weekDays.map((dia, index) => (
+                    <button
+                      key={dia.date.toISOString()}
+                      onClick={() => setSelectedDay(dia)}
+                      className={`px-3 py-3 text-center border-r border-gray-100 transition hover:bg-gray-50 ${
+                        dia.isToday ? "bg-blue-50" : "bg-white"
+                      }`}
+                    >
+                      <div className="text-xs font-bold text-gray-500 uppercase">
+                        {DIAS_SEMANA[index]}
+                      </div>
+                      <div
+                        className={`mt-1 mx-auto flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
+                          dia.isToday ? "bg-blue-600 text-white" : "text-gray-800"
+                        }`}
+                      >
+                        {dia.day}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <div
+                  className="grid grid-cols-[42px_repeat(7,minmax(0,1fr))] md:grid-cols-[72px_repeat(7,minmax(110px,1fr))] relative"
+                  style={{
+                    height: `${(horarioSemana.fim - horarioSemana.inicio) * HOUR_HEIGHT_PX}px`,
+                  }}
+                >
+                  <div className="relative bg-gray-50 border-r border-gray-200">
+                    {horarioSemana.horas.slice(0, -1).map(hora => (
+                      <div
+                        key={hora}
+                        className="absolute left-0 right-0 -translate-y-2 pr-3 text-right text-xs font-semibold text-gray-400"
+                        style={{ top: `${(hora - horarioSemana.inicio) * HOUR_HEIGHT_PX}px` }}
+                      >
+                        {hora.toString().padStart(2, "0")}:00
+                      </div>
+                    ))}
+                  </div>
+
+                  {weekDays.map(dia => (
+                    <div
+                      key={dia.date.toISOString()}
+                      className={`relative border-r border-gray-100 ${
+                        dia.isToday ? "bg-blue-50/30" : "bg-white"
+                      }`}
+                    >
+                      {horarioSemana.horas.slice(0, -1).map(hora => (
+                        <div
+                          key={hora}
+                          className="absolute left-0 right-0 border-t border-gray-100"
+                          style={{ top: `${(hora - horarioSemana.inicio) * HOUR_HEIGHT_PX}px` }}
+                        />
+                      ))}
+
+                      {dia.turnos.map(turno => {
+                        const startMinutes = timeToMinutes(turno.horaInicio);
+                        const endMinutes = timeToMinutes(turno.horaFim);
+                        const durationMinutes = Math.max(endMinutes - startMinutes, 30);
+                        const top =
+                          ((startMinutes - horarioSemana.inicio * 60) / 60) * HOUR_HEIGHT_PX;
+                        const height = Math.max((durationMinutes / 60) * HOUR_HEIGHT_PX, 30);
+                        const isPassado = !isTurnoFuturo(turno);
+                        const corClasses = getCorPorTipo(turno.tipo, isPassado);
+
+                        return (
+                          <button
+                            key={turno.id}
+                            onClick={() => setSelectedDay(dia)}
+                            className={`absolute left-0.5 right-0.5 rounded border px-1 py-1 text-left text-[9px] md:text-xs leading-tight shadow-sm overflow-hidden transition hover:shadow-md ${corClasses} ${
+                              turno.isVirtual ? "border-dashed" : ""
+                            }`}
+                            style={{ top: `${top}px`, height: `${height}px` }}
+                            title={`${turno.nome || turno.tipo} (${turno.horaInicio}-${turno.horaFim})`}
+                          >
+                            <span className="block font-bold truncate">
+                              {turno.horaInicio} - {turno.horaFim}
+                            </span>
+                            <span className="block truncate">{turno.nome || turno.tipo || "Turno"}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* MODAL DETALHE DO DIA */}
