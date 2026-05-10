@@ -453,23 +453,23 @@ export default function Calendario(): JSX.Element {
               </div>
             </>
           ) : (
-            <div className="overflow-x-auto bg-white">
-              <div className="w-full min-w-[760px] xl:min-w-0">
-                <div className="grid grid-cols-[52px_repeat(7,minmax(96px,1fr))] lg:grid-cols-[72px_repeat(7,minmax(120px,1fr))] 2xl:grid-cols-[84px_repeat(7,minmax(150px,1fr))] border-b border-gray-200">
+            <div className="overflow-x-hidden bg-white">
+              <div className="w-full">
+                <div className="grid grid-cols-[38px_repeat(7,minmax(0,1fr))] sm:grid-cols-[48px_repeat(7,minmax(0,1fr))] lg:grid-cols-[72px_repeat(7,minmax(0,1fr))] 2xl:grid-cols-[84px_repeat(7,minmax(0,1fr))] border-b border-gray-200">
                   <div className="bg-gray-50 border-r border-gray-200" />
                   {weekDays.map((dia, index) => (
                     <button
                       key={dia.date.toISOString()}
                       onClick={() => setSelectedDay(dia)}
-                      className={`px-3 py-3 text-center border-r border-gray-100 transition hover:bg-gray-50 ${
+                      className={`px-0.5 py-2 text-center border-r border-gray-100 transition hover:bg-gray-50 sm:px-2 sm:py-3 ${
                         dia.isToday ? "bg-blue-50" : "bg-white"
                       }`}
                     >
-                      <div className="text-xs font-bold text-gray-500 uppercase">
+                      <div className="text-[9px] font-bold text-gray-500 uppercase sm:text-xs">
                         {DIAS_SEMANA[index]}
                       </div>
                       <div
-                        className={`mt-1 mx-auto flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
+                        className={`mt-1 mx-auto flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold sm:h-8 sm:w-8 sm:text-sm ${
                           dia.isToday ? "bg-blue-600 text-white" : "text-gray-800"
                         }`}
                       >
@@ -480,7 +480,7 @@ export default function Calendario(): JSX.Element {
                 </div>
 
                 <div
-                  className="grid grid-cols-[52px_repeat(7,minmax(96px,1fr))] lg:grid-cols-[72px_repeat(7,minmax(120px,1fr))] 2xl:grid-cols-[84px_repeat(7,minmax(150px,1fr))] relative"
+                  className="grid grid-cols-[38px_repeat(7,minmax(0,1fr))] sm:grid-cols-[48px_repeat(7,minmax(0,1fr))] lg:grid-cols-[72px_repeat(7,minmax(0,1fr))] 2xl:grid-cols-[84px_repeat(7,minmax(0,1fr))] relative"
                   style={{
                     height: `${
                       ((horarioSemana.fimMinutos - horarioSemana.inicioMinutos) / 60) *
@@ -498,10 +498,10 @@ export default function Calendario(): JSX.Element {
                       return (
                         <div
                           key={minutos}
-                          className="absolute left-0 right-0 px-1.5 text-right text-[10px] font-semibold leading-none text-gray-500 sm:text-xs"
+                          className="absolute left-0 right-0 px-0.5 text-right text-[9px] font-semibold leading-none text-gray-500 sm:px-1.5 sm:text-xs"
                           style={{ top: `${labelTop}px` }}
                         >
-                          <span className="inline-block rounded bg-gray-50 px-1 py-0.5">
+                          <span className="inline-block rounded bg-gray-50 px-0.5 py-0.5 sm:px-1">
                             {formatMinutesToTime(minutos)}
                           </span>
                         </div>
@@ -542,7 +542,7 @@ export default function Calendario(): JSX.Element {
                           <button
                             key={turno.id}
                             onClick={() => setSelectedDay(dia)}
-                            className={`absolute left-0.5 right-0.5 rounded border px-1 py-1 text-left text-[9px] md:text-xs leading-tight shadow-sm overflow-hidden transition hover:shadow-md ${corClasses} ${
+                            className={`absolute left-px right-px rounded border px-0.5 py-0.5 text-left text-[8px] leading-tight shadow-sm overflow-hidden transition hover:shadow-md sm:left-0.5 sm:right-0.5 sm:px-1 sm:py-1 sm:text-[9px] md:text-xs ${corClasses} ${
                               turno.isVirtual ? "border-dashed" : ""
                             }`}
                             style={{ top: `${top}px`, height: `${height}px` }}
@@ -551,7 +551,9 @@ export default function Calendario(): JSX.Element {
                             <span className="block font-bold truncate">
                               {turno.horaInicio} - {turno.horaFim}
                             </span>
-                            <span className="block truncate">{turno.nome || turno.tipo || "Turno"}</span>
+                            <span className="hidden truncate sm:block">
+                              {turno.nome || turno.tipo || "Turno"}
+                            </span>
                           </button>
                         );
                       })}
