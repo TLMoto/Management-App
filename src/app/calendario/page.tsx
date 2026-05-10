@@ -40,8 +40,8 @@ type VistaCalendario = "mes" | "semana";
 
 const DIAS_SEMANA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const HOUR_HEIGHT_PX = 64;
-const WEEK_VIEW_START_MINUTES = 10 * 60;
-const WEEK_VIEW_END_MINUTES = 23 * 60 + 30;
+const WEEK_VIEW_START_MINUTES = 8 * 60;
+const WEEK_VIEW_END_MINUTES = 24 * 60;
 
 // --- HELPERS ---
 const getWeekDayFromDate = (dateStr: string): number => {
@@ -188,13 +188,13 @@ const timeToMinutes = (time?: string): number => {
 };
 
 const formatMinutesToTime = (minutes: number): string => {
-  const hours = Math.floor(minutes / 60);
+  const hours = Math.floor(minutes / 60) % 24;
   const remainingMinutes = minutes % 60;
   return `${hours.toString().padStart(2, "0")}:${remainingMinutes.toString().padStart(2, "0")}`;
 };
 
 const getHorarioSemana = (_dias: DiaCalendario[]) => {
-  const horas = Array.from(
+  const linhas = Array.from(
     { length: Math.floor((WEEK_VIEW_END_MINUTES - WEEK_VIEW_START_MINUTES) / 60) + 1 },
     (_, i) => WEEK_VIEW_START_MINUTES + i * 60
   );
@@ -202,9 +202,10 @@ const getHorarioSemana = (_dias: DiaCalendario[]) => {
   return {
     inicioMinutos: WEEK_VIEW_START_MINUTES,
     fimMinutos: WEEK_VIEW_END_MINUTES,
-    marcas: [...horas, WEEK_VIEW_END_MINUTES],
+    linhas,
+    marcas: linhas.slice(0, -1),
   };
-}; 
+};
 
 // HELPER DE CORES
 const getCorPorTipo = (tipo?: string, isPassado?: boolean) => {
@@ -488,19 +489,24 @@ export default function Calendario(): JSX.Element {
                   }}
                 >
                   <div className="relative bg-gray-50 border-r border-gray-200">
-                    {horarioSemana.marcas.map(minutos => (
-                      <div
-                        key={minutos}
-                        className="absolute left-0 right-0 -translate-y-2 pr-3 text-right text-xs font-semibold text-gray-400"
-                        style={{
-                          top: `${
-                            ((minutos - horarioSemana.inicioMinutos) / 60) * HOUR_HEIGHT_PX
-                          }px`,
-                        }}
-                      >
-                        {formatMinutesToTime(minutos)}
-                      </div>
-                    ))}
+                    {horarioSemana.marcas.map(minutos => {
+                      const posicao =
+                        ((minutos - horarioSemana.inicioMinutos) / 60) * HOUR_HEIGHT_PX;
+                      const isPrimeiraMarca = minutos === horarioSemana.inicioMinutos;
+                      const labelTop = isPrimeiraMarca ? 6 : posicao + 5;
+
+                      return (
+                        <div
+                          key={minutos}
+                          className="absolute left-0 right-0 px-1.5 text-right text-[10px] font-semibold leading-none text-gray-500 sm:text-xs"
+                          style={{ top: `${labelTop}px` }}
+                        >
+                          <span className="inline-block rounded bg-gray-50 px-1 py-0.5">
+                            {formatMinutesToTime(minutos)}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {weekDays.map(dia => (
@@ -510,7 +516,7 @@ export default function Calendario(): JSX.Element {
                         dia.isToday ? "bg-blue-50/30" : "bg-white"
                       }`}
                     >
-                      {horarioSemana.marcas.map(minutos => (
+                      {horarioSemana.linhas.map(minutos => (
                         <div
                           key={minutos}
                           className="absolute left-0 right-0 border-t border-gray-100"
