@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import type { JSX } from "react";
 import ProtectedPage from "@/src/components/ProtectedPage";
+import { useUser } from "@/src/components/UserProvider";
 import { getTurnos, getEventos, getAllUsers, TurnoAirtable } from "../api/airtable/airtable";
 import { Evento, User } from "@/src/components/Interfaces";
 
@@ -44,6 +45,17 @@ const WEEK_VIEW_START_MINUTES = 8 * 60;
 const WEEK_VIEW_END_MINUTES = 24 * 60;
 
 // --- HELPERS ---
+const getLisbonToday = (): Date => {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Lisbon",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (type: string) => Number(parts.find(part => part.type === type)?.value);
+  return new Date(value("year"), value("month") - 1, value("day"));
+};
+
 const getWeekDayFromDate = (dateStr: string): number => {
   if (!dateStr) return 0;
   const [day, month, year] = dateStr.split("/").map(Number);
@@ -75,7 +87,7 @@ const parseDateString = (dateStr: string): Date => {
 const isTurnoFuturo = (turno: TurnoLocal): boolean => {
   if (!turno.dataCompleta) return false;
   const turnoDate = parseDateString(turno.dataCompleta);
-  const today = new Date();
+  const today = getLisbonToday();
   today.setHours(0, 0, 0, 0);
   return turnoDate >= today;
 };
@@ -88,8 +100,10 @@ const expandirTurnosRecorrentes = (turnosOriginais: TurnoLocal[]): TurnoLocal[] 
     listaExpandida.push(turno); // Adiciona o real
 
     if (turno.tipo !== "Turno" && turno.dataLimiteRecorrencia) {
-      const dataLimite = new Date(turno.dataLimiteRecorrencia);
-      let dataReferencia = parseDateString(turno.dataCompleta!);
+      const dataLimite = parseDateString(
+        turno.dataLimiteRecorrencia.slice(0, 10).split("-").reverse().join("/")
+      );
+      const dataReferencia = parseDateString(turno.dataCompleta!);
 
       while (true) {
         dataReferencia.setDate(dataReferencia.getDate() + 7);
@@ -128,7 +142,7 @@ const generateCalendarDays = (currentDate: Date, turnos: TurnoLocal[]): DiaCalen
   startDate.setDate(firstDayOfMonth.getDate() - daysToSubtract);
 
   const days: DiaCalendario[] = [];
-  const today = new Date();
+  const today = getLisbonToday();
 
   for (let i = 0; i < 42; i++) {
     const currentDay = new Date(startDate);
@@ -157,7 +171,7 @@ const generateCalendarDays = (currentDate: Date, turnos: TurnoLocal[]): DiaCalen
 
 const generateWeekDays = (currentDate: Date, turnos: TurnoLocal[]): DiaCalendario[] => {
   const startDate = getStartOfWeek(currentDate);
-  const today = new Date();
+  const today = getLisbonToday();
 
   return Array.from({ length: 7 }, (_, index) => {
     const currentDay = new Date(startDate);
@@ -185,6 +199,46 @@ const timeToMinutes = (time?: string): number => {
   if (!time) return 0;
   const [hours = 0, minutes = 0] = time.split(":").map(Number);
   return hours * 60 + minutes;
+};
+
+// Assign a column to each overlapping appointment within a connected group.
+const layoutWeekShifts = (turnos: TurnoLocal[]) => {
+  const entries = turnos
+    .map(turno => {
+      const start = timeToMinutes(turno.horaInicio);
+      return {
+        turno,
+        start,
+        end: Math.max(timeToMinutes(turno.horaFim), start + 30),
+        column: 0,
+        columns: 1,
+      };
+    })
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+
+  let group: typeof entries = [];
+  let columnEnds: number[] = [];
+  let groupEnd = -Infinity;
+
+  const finishGroup = () => {
+    group.forEach(entry => {
+      entry.columns = columnEnds.length;
+    });
+    group = [];
+    columnEnds = [];
+  };
+
+  for (const entry of entries) {
+    if (entry.start >= groupEnd) finishGroup();
+    let column = columnEnds.findIndex(end => end <= entry.start);
+    if (column === -1) column = columnEnds.length;
+    entry.column = column;
+    columnEnds[column] = entry.end;
+    group.push(entry);
+    groupEnd = Math.max(...columnEnds);
+  }
+  finishGroup();
+  return entries;
 };
 
 const formatMinutesToTime = (minutes: number): string => {
@@ -221,10 +275,14 @@ const getCorPorTipo = (tipo?: string, isPassado?: boolean) => {
 };
 
 export default function Calendario(): JSX.Element {
+  const { user } = useUser();
+  const [onlyMine, setOnlyMine] = useState(false);
+  const [selectedDepartment, setSelectedDepartment] = useState("");
+
   // --- ESTADOS ---
   const [turnos, setTurnos] = useState<TurnoLocal[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(getLisbonToday);
   const [selectedDay, setSelectedDay] = useState<DiaCalendario | null>(null);
   const [vista, setVista] = useState<VistaCalendario>("mes");
 
@@ -242,14 +300,41 @@ export default function Calendario(): JSX.Element {
 
   const getNomeEvento = (id: string) => eventos.find(e => e.id === id)?.nome || "---";
 
-  // Calendar days
+  const departments = useMemo(
+    () => Array.from(new Set(airtableUsers.map(person => person.department.trim()).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b, "pt")),
+    [airtableUsers]
+  );
+
+  const filteredTurnos = useMemo(() => {
+    const departmentMemberIds = new Set(
+      airtableUsers
+        .filter(person => person.department.trim() === selectedDepartment)
+        .flatMap(person => [person.id, String(person.istId)])
+    );
+    const myIds = new Set(user ? [user.id, String(user.istId)] : []);
+
+    return turnos.filter(turno => {
+      const memberIds = [...turno.participantesIds, turno.responsavelId];
+      const matchesPerson = !onlyMine || memberIds.some(id => myIds.has(id));
+      const matchesDepartment = !selectedDepartment ||
+        memberIds.some(id => departmentMemberIds.has(id));
+      return matchesPerson && matchesDepartment;
+    });
+  }, [turnos, airtableUsers, user, onlyMine, selectedDepartment]);
+
+  // Apply the same filters to both calendar views and the day details.
   const calendarDays = useMemo(() => {
-    return generateCalendarDays(currentMonth, turnos);
-  }, [currentMonth, turnos]);
+    return generateCalendarDays(currentMonth, filteredTurnos);
+  }, [currentMonth, filteredTurnos]);
 
   const weekDays = useMemo(() => {
-    return generateWeekDays(currentMonth, turnos);
-  }, [currentMonth, turnos]);
+    return generateWeekDays(currentMonth, filteredTurnos);
+  }, [currentMonth, filteredTurnos]);
+
+  const selectedDayTurnos = selectedDay
+    ? filteredTurnos.filter(turno => turno.dataCompleta === formatDateToDDMMYYYY(selectedDay.date))
+    : [];
 
   const horarioSemana = useMemo(() => getHorarioSemana(weekDays), [weekDays]);
 
@@ -316,7 +401,7 @@ export default function Calendario(): JSX.Element {
       }
       return new Date(prev.getFullYear(), prev.getMonth() + 1, 1);
     });
-  const goToToday = () => setCurrentMonth(new Date());
+  const goToToday = () => setCurrentMonth(getLisbonToday());
 
   const tituloCalendario =
     vista === "semana"
@@ -338,14 +423,58 @@ export default function Calendario(): JSX.Element {
           </button>
         </div>
 
+        <section aria-label="Filtros do calendário" className="mb-6 rounded-lg bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <p className="mb-2 text-sm font-medium text-gray-700">Marcações</p>
+              <div role="group" aria-label="Filtrar por participação" className="flex rounded-lg border border-gray-200 p-1">
+                {[{ label: "Todas", value: false }, { label: "As minhas", value: true }].map(option => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    aria-pressed={onlyMine === option.value}
+                    onClick={() => setOnlyMine(option.value)}
+                    className={`rounded-md px-4 py-2 text-sm font-medium transition ${onlyMine === option.value ? "bg-blue-100 text-blue-700" : "text-gray-600 hover:bg-gray-100"}`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="min-w-0 flex-1 sm:max-w-xs">
+              <label htmlFor="calendar-department" className="mb-2 block text-sm font-medium text-gray-700">
+                Departamento
+              </label>
+              <select
+                id="calendar-department"
+                value={selectedDepartment}
+                onChange={event => setSelectedDepartment(event.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900"
+              >
+                <option value="">Todos os departamentos</option>
+                {departments.map(department => (
+                  <option key={department} value={department}>{department}</option>
+                ))}
+              </select>
+            </div>
+            {(onlyMine || selectedDepartment) && (
+              <button type="button" onClick={() => { setOnlyMine(false); setSelectedDepartment(""); }}
+                className="rounded-lg px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">
+                Limpar filtros
+              </button>
+            )}
+          </div>
+          {(onlyMine || selectedDepartment) && filteredTurnos.length === 0 && !isLoading && (
+            <p role="status" className="mt-3 text-sm text-gray-700">Não há marcações com os filtros selecionados.</p>
+          )}
+        </section>
+
         {/* CALENDAR VIEW */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-8">
           {/* Header */}
           <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <h2 className="text-xl font-bold text-gray-800 capitalize">
-                {tituloCalendario}
-              </h2>
+              <h2 className="text-xl font-bold text-gray-800 capitalize">{tituloCalendario}</h2>
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex rounded-lg border border-gray-200 bg-white p-1">
                   <button
@@ -453,8 +582,8 @@ export default function Calendario(): JSX.Element {
               </div>
             </>
           ) : (
-            <div className="overflow-x-hidden bg-white">
-              <div className="w-full">
+            <div className="overflow-x-auto bg-white">
+              <div className="w-full min-w-[900px]">
                 <div className="grid grid-cols-[38px_repeat(7,minmax(0,1fr))] sm:grid-cols-[48px_repeat(7,minmax(0,1fr))] lg:grid-cols-[72px_repeat(7,minmax(0,1fr))] 2xl:grid-cols-[84px_repeat(7,minmax(0,1fr))] border-b border-gray-200">
                   <div className="bg-gray-50 border-r border-gray-200" />
                   {weekDays.map((dia, index) => (
@@ -528,7 +657,7 @@ export default function Calendario(): JSX.Element {
                         />
                       ))}
 
-                      {dia.turnos.map(turno => {
+                      {layoutWeekShifts(dia.turnos).map(({ turno, column, columns }) => {
                         const startMinutes = timeToMinutes(turno.horaInicio);
                         const endMinutes = timeToMinutes(turno.horaFim);
                         const durationMinutes = Math.max(endMinutes - startMinutes, 30);
@@ -542,16 +671,19 @@ export default function Calendario(): JSX.Element {
                           <button
                             key={turno.id}
                             onClick={() => setSelectedDay(dia)}
-                            className={`absolute left-px right-px rounded border px-0.5 py-0.5 text-left text-[8px] leading-tight shadow-sm overflow-hidden transition hover:shadow-md sm:left-0.5 sm:right-0.5 sm:px-1 sm:py-1 sm:text-[9px] md:text-xs ${corClasses} ${
+                            className={`absolute rounded border px-0.5 py-0.5 text-left text-[8px] leading-tight shadow-sm overflow-hidden transition hover:shadow-md sm:px-1 sm:py-1 sm:text-[9px] md:text-xs ${corClasses} ${
                               turno.isVirtual ? "border-dashed" : ""
                             }`}
-                            style={{ top: `${top}px`, height: `${height}px` }}
+                            style={{ top: `${top}px`, height: `${height}px`,
+                              left: `calc(${(column / columns) * 100}% + 2px)`,
+                              width: `calc(${100 / columns}% - 4px)`,
+                            }}
                             title={`${turno.nome || turno.tipo} (${turno.horaInicio}-${turno.horaFim})`}
                           >
                             <span className="block font-bold truncate">
                               {turno.horaInicio} - {turno.horaFim}
                             </span>
-                            <span className="hidden truncate sm:block">
+                            <span className="block truncate">
                               {turno.nome || turno.tipo || "Turno"}
                             </span>
                           </button>
@@ -583,14 +715,14 @@ export default function Calendario(): JSX.Element {
               </div>
 
               <div className="p-5 overflow-y-auto flex-1 bg-white">
-                {selectedDay.turnos.length === 0 ? (
+                {selectedDayTurnos.length === 0 ? (
                   <div className="text-center py-10 text-gray-500">
                     <p className="text-lg mb-1"></p>
                     <p>Dia livre! Não há nada marcado.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {selectedDay.turnos.map(turno => {
+                    {selectedDayTurnos.map(turno => {
                       const isPassado = !isTurnoFuturo(turno);
                       return (
                         <div
