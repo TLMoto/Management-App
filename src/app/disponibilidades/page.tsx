@@ -54,6 +54,9 @@ export default function Disponibilidades() {
   const [selectedPersonIds, setSelectedPersonIds] = useState<string[]>([]);
   const [inactivePersonIds, setInactivePersonIds] = useState<string[]>([]);
 
+  const [hoveredPersonId, setHoveredPersonId] = useState<string | null>(null);
+  const [focusedPersonId, setFocusedPersonId] = useState<string | null>(null);
+
   // Função para converter CrabFit availability format para TimeSlot[]
   const convertCrabFitAvailabilityToTimeSlots = (crabAvailability: string[]): TimeSlot[] => {
     const timeSlots: TimeSlot[] = [];
@@ -103,6 +106,8 @@ export default function Disponibilidades() {
 
   const handleAreaChange = (area: string) => {
     setSelectedArea(area);
+    setHoveredPersonId(null);
+    setFocusedPersonId(null);
     setInactivePersonIds([]);
     setSelectedPersonIds(
       area
@@ -134,12 +139,16 @@ export default function Disponibilidades() {
   // Handle person removal
   const handlePersonRemove = (personId: string) => {
     setSelectedPersonIds(prev => prev.filter(id => id !== personId));
+    setHoveredPersonId(current => (current === personId ? null : current));
+    setFocusedPersonId(current => (current === personId ? null : current));
     setInactivePersonIds(prev => prev.filter(id => id !== personId));
   };
 
   // Clear all selected people
   const clearSelectedPeople = () => {
     setSelectedPersonIds([]);
+    setHoveredPersonId(null);
+    setFocusedPersonId(null);
     setInactivePersonIds([]);
   };
 
@@ -268,16 +277,8 @@ export default function Disponibilidades() {
     }, 0);
   };
 
-  // Calcular percentagem de disponibilidade para um slot
-  const getSlotPercentage = (day: number, hour: number, minute: number) => {
-    const count = getSlotCount(day, hour, minute);
-    const totalPeople = filteredPeople.length || 1;
-    return totalPeople ? Math.round((count / totalPeople) * 100) : 0;
-  };
-
   // Obter cor baseada na percentagem de disponibilidade
-  const getSlotColor = (day: number, hour: number, minute: number) => {
-    const percentage = getSlotPercentage(day, hour, minute);
+  const getSlotColor = (percentage: number) => {
     if (percentage === 0) return "bg-gray-100";
     if (percentage <= 25) return "bg-red-200";
     if (percentage <= 50) return "bg-yellow-200";
@@ -286,9 +287,14 @@ export default function Disponibilidades() {
   };
 
   // Obter lista de pessoas disponíveis num slot específico
-  const getPeopleAtSlot = (day: number, hour: number, minute: number) => {
+  const getPeopleAtSlot = (
+    day: number,
+    hour: number,
+    minute: number,
+    people = filteredPeople
+  ) => {
     const peopleAtSlot: string[] = [];
-    filteredPeople.forEach(person => {
+    people.forEach(person => {
       const personSlots = availability[person.id] || [];
       if (
         personSlots.some(slot => slot.day === day && slot.hour === hour && slot.minute === minute)
@@ -331,6 +337,11 @@ export default function Disponibilidades() {
 
   const suggestions = getSearchSuggestions();
   const selectedPeople = users.filter(person => selectedPersonIds.includes(person.id));
+  const previewPerson =
+    selectedPeople.length > 1
+      ? selectedPeople.find(person => person.id === (hoveredPersonId ?? focusedPersonId))
+      : undefined;
+  const calendarPeople = previewPerson ? [previewPerson] : filteredPeople;
 
   return (
     <ProtectedPage>
@@ -396,7 +407,11 @@ export default function Disponibilidades() {
                       Limpar todas
                     </button>
                   </div>
-                  <p className="mb-2 text-xs text-gray-500">Clica no nome para mostrar ou ocultar a disponibilidade. O × remove a pessoa da lista.</p>
+                  <p className="mb-2 text-xs text-gray-500">
+                    {selectedPeople.length > 1 &&
+                      "Passa o rato sobre um nome para ver a disponibilidade individual. "}
+                    Clica no nome para mostrar ou ocultar a disponibilidade. O × remove a pessoa da lista.
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {selectedPeople.map(person => (
                       <div
@@ -406,6 +421,16 @@ export default function Disponibilidades() {
                         <button
                           type="button"
                           onClick={() => togglePersonAvailability(person.id)}
+                          onPointerEnter={event => {
+                            if (event.pointerType === "mouse") setHoveredPersonId(person.id);
+                          }}
+                          onPointerLeave={() => setHoveredPersonId(null)}
+                          onFocus={event => {
+                            if (event.currentTarget.matches(":focus-visible")) {
+                              setFocusedPersonId(person.id);
+                            }
+                          }}
+                          onBlur={() => setFocusedPersonId(null)}
                           aria-pressed={!inactivePersonIds.includes(person.id)}
                           aria-label={(inactivePersonIds.includes(person.id) ? "Mostrar disponibilidade de " : "Ocultar disponibilidade de ") + person.name}
                           className="rounded px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
@@ -453,7 +478,9 @@ export default function Disponibilidades() {
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="p-4 border-b bg-gray-50">
               <h2 className="text-lg font-semibold text-gray-900">
-                Calendário de Disponibilidades
+                {previewPerson
+                  ? `Disponibilidade de ${previewPerson.name}`
+                  : "Calendário de Disponibilidades"}
               </h2>
             </div>
 
@@ -484,27 +511,26 @@ export default function Disponibilidades() {
                       </td>
 
                       {WEEK_ORDER.map(dayIndex => {
-                        const count = getSlotCount(dayIndex, timeSlot.hour, timeSlot.minute);
-                        const percentage = getSlotPercentage(
-                          dayIndex,
-                          timeSlot.hour,
-                          timeSlot.minute
-                        );
                         const peopleAtSlot = getPeopleAtSlot(
                           dayIndex,
                           timeSlot.hour,
-                          timeSlot.minute
+                          timeSlot.minute,
+                          calendarPeople
                         );
+                        const count = peopleAtSlot.length;
+                        const percentage = calendarPeople.length
+                          ? Math.round((count / calendarPeople.length) * 100)
+                          : 0;
 
                         return (
                           <td key={dayIndex} className="w-20 sm:w-24 md:w-28 px-1 py-1">
                             <div
                               className={`
                                 h-8 sm:h-10 w-full border border-gray-300 transition-all duration-200 rounded
-                                ${getSlotColor(dayIndex, timeSlot.hour, timeSlot.minute)}
+                                ${getSlotColor(percentage)}
                                 flex items-center justify-center relative group cursor-pointer
                               `}
-                              title={`${count}/${filteredPeople.length} pessoas (${percentage}%)\n${peopleAtSlot.join(", ")}`}
+                              title={`${count}/${calendarPeople.length} pessoas (${percentage}%)\n${peopleAtSlot.join(", ")}`}
                             >
                               <button
                                 type="button"
@@ -526,7 +552,7 @@ export default function Disponibilidades() {
                               {peopleAtSlot.length > 0 && (
                                 <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity z-20 whitespace-nowrap pointer-events-none">
                                   <div className="font-semibold">
-                                    {count}/{filteredPeople.length} pessoas ({percentage}%)
+                                    {count}/{calendarPeople.length} pessoas ({percentage}%)
                                   </div>
                                   <div className="mt-1">{peopleAtSlot.join(", ")}</div>
                                 </div>
@@ -559,7 +585,12 @@ export default function Disponibilidades() {
             </div>
             <div className="max-h-[40vh] overflow-y-auto text-sm text-gray-700" aria-live="polite">
               {(() => {
-                const names = getPeopleAtSlot(selectedSlot.day, selectedSlot.hour, selectedSlot.minute);
+                const names = getPeopleAtSlot(
+                  selectedSlot.day,
+                  selectedSlot.hour,
+                  selectedSlot.minute,
+                  calendarPeople
+                );
                 return names.length ? (
                   <>
                     <p className="mb-2">{names.length} pessoas disponíveis (filtros atuais):</p>
